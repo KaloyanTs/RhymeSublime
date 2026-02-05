@@ -1,0 +1,13 @@
+generator.py
+model.py
+train.py
+auth2id
+char2id
+corpusPoems
+trainData
+testData
+
+bg_dict_csv/
+__pycache__/
+.vscode/
+*.pyc
