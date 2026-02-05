@@ -169,13 +169,7 @@ class TokenLSTMLanguageModelPack(torch.nn.Module):
 
     def forward(self, source):
         X, auth = self.preparePaddedBatch(source)   # X: (T,B)
-        try:
-            max_len = max(len(s) for (a, s) in source)
-        except Exception:
-            pass
-
         E = self.embed(X[:-1])                      # (T-1,B,E)
-
         h0 = self.embed_auth_out(auth).unsqueeze(0).repeat(self.lstm_layers, 1, 1)
         c0 = self.embed_auth_cell(auth).unsqueeze(0).repeat(self.lstm_layers, 1, 1)
 

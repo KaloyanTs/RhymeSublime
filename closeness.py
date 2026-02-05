@@ -33,7 +33,7 @@ for ch, h, b in [
     ("а",3,3), ("е",2,1), ("и",1,1), ("о",2,3),
     ("у",1,3), ("ъ",2,2), ("я",3,1), ("ю",1,3)
 ]:
-    F[ch] = [1, 1, 0, 0, h, b]
+    F[ch] = [1, 1, 0, 0, h/3, b/3]
 
 # --- Consonants ---
 for ch, v, p, m in [
@@ -50,7 +50,7 @@ for ch, v, p, m in [
     ("ц",0,3,3), ("ч",0,4,3),
     ("щ",0,6,2), ("ь",0,0,0)
 ]:
-    F[ch] = [0, v, p, m, 0, 0]
+    F[ch] = [0, v, p/6, m/5, 0, 0]
 
 # --- Distance & similarity ---
 def dist(a, b):
@@ -75,10 +75,10 @@ for i, a in enumerate(letters):
 # --- Plot ---
 plt.figure(figsize=(10, 8))
 im = plt.imshow(M, cmap="viridis")
-plt.colorbar(im, label="Sound closeness")
+plt.colorbar(im, label="Разстояние между звуците (фонетична разлика)")
 plt.xticks(range(N), letters, rotation=90)
 plt.yticks(range(N), letters)
-plt.title("Bulgarian letter sound closeness (phonetic features)")
+plt.title("Разстояние между букви (определени от фонетични признаци)")
 
 # Add text annotations with values
 for i in range(N):

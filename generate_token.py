@@ -228,7 +228,8 @@ def generateText(
     last_word_base = ""
 
     while len(out_text) < limit:
-        print(f"[Gen] Generating line: {line_no+1}", end='\r', flush=True)
+        if debug:
+            print(f"[Gen] Generating line: {line_no+1}", end='\r', flush=True)
         def sample_line():
             toks, ll = [], 0.0
             h_local = h.clone(); c_local = c.clone()

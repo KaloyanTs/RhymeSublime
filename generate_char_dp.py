@@ -97,9 +97,11 @@ def generateText(
     startSentence,
     limit=1000,
     temperature=0.4,
-    K=1,                  # kept for compatibility; not used (no repeated sampling)
+    K=16,
     max_line_len=80,
     w_rep=0.0,
+    w_ll=10.0,
+    w_rhyme=1.0,
     debug=False,
 ):
     """
@@ -189,13 +191,15 @@ def generateText(
     line_no = 0
     stress_positions = []
 
-    while len(out_text) < limit:
-        # Sample one line (no candidate reranking)
-        toks, ll = [], 0.0
-        h_local = h.clone()
-        c_local = c.clone()
-        last_id_local = int(last_id)
-        last_tok_local = last_tok
+    def sample_one_line(h_start, c_start, last_id_start, last_tok_start):
+        # Returns: toks, ll, h_end, c_end, ended_poem
+        h_local = h_start.clone()
+        c_local = c_start.clone()
+        last_id_local = int(last_id_start)
+        last_tok_local = last_tok_start
+
+        toks = []
+        ll = 0.0
 
         for _ in range(max_line_len):
             nxt, lp, h_local, c_local = step(last_id_local, h_local, c_local, last_tok_local)
@@ -206,40 +210,77 @@ def generateText(
             if nxt == nl_id or nxt == stop_id:
                 break
 
-        # Force newline if needed (and if we know nl_id)
+        # Force newline if needed
         if nl_id is not None and toks and toks[-1] != nl_id and toks[-1] != stop_id:
             nxt, lp, h_local, c_local = force(last_id_local, h_local, c_local, last_tok_local, nl_id)
             toks.append(nxt)
             ll += lp
-            last_id_local = nxt
-            last_tok_local = id2tok[nxt]
 
-        # Commit line
-        h, c = h_local, c_local
+        ended_poem = bool(stop_id is not None and toks and toks[-1] == stop_id)
+        return toks, ll, h_local, c_local, ended_poem
 
-        if stop_id is not None and toks and toks[-1] == stop_id:
-            out_text += tokens_to_text(toks)
-            break
+    last_word_base = ""
 
-        line_text = tokens_to_text(toks[:-1])  # exclude newline
-        last_word = extract_last_word(line_text)
-        tail, sidx = extract_rime(last_word)
-
+    while len(out_text) < limit:
         if line_no % 2 == 0:
+            # Generate base line (odd index human-readable)
+            toks, ll, h_end, c_end, ended_poem = sample_one_line(h, c, last_id, last_tok)
+            h, c = h_end, c_end
+            if ended_poem:
+                out_text += tokens_to_text(toks)
+                break
+
+            line_text = tokens_to_text(toks[:-1])
+            last_word = extract_last_word(line_text)
+            tail, sidx = extract_rime(last_word)
             base_tail = tail
+            last_word_base = last_word
             if debug:
                 print(f"[Gen] Line {line_no+1} base tail: {repr(base_tail)} from last word {repr(last_word)}")
+
+            stress_positions.append(sidx)
+            out_text += tokens_to_text(toks)
+
+            last_id = int(toks[-1])
+            last_tok = id2tok[last_id]
         else:
+            # Sample K candidates and pick best based on rhyme DP and repetition
+            candidates = []
+            for _ in range(max(1, int(K))):
+                toks, ll, h_end, c_end, ended_poem = sample_one_line(h, c, last_id, last_tok)
+                line_text = tokens_to_text(toks[:-1])
+                cand_word = extract_last_word(line_text)
+                cand_tail, sidx = extract_rime(cand_word)
+
+                # Normalize LL by length
+                denom = max(1, len(toks))
+                ll_norm = ll / denom
+                rhyme_loss = rhyme_penalty_str(base_tail, cand_tail)
+                rep_pen = repetition_penalty(toks[:-1], w_rep, id2tok)
+
+                score = w_ll * ll_norm - w_rhyme * rhyme_loss - w_rep * rep_pen
+                if last_word_base == cand_word and last_word_base != "":
+                    score -= 20.0
+
+                candidates.append((score, toks, h_end, c_end, ended_poem, sidx))
+
+                # Keep candidates sorted for potential early pruning (optional)
+                candidates.sort(key=lambda x: x[0], reverse=True)
+
+            best_score, best_toks, best_h, best_c, ended_poem, best_sidx = candidates[0]
             if debug:
-                rhy = rhyme_penalty_str(base_tail, tail)
-                rep = repetition_penalty(toks[:-1], w_rep, id2tok)
-                print(f"[Gen] Line {line_no+1} cand tail: {repr(tail)} vs base {repr(base_tail)} | rhyme_pen={rhy:.4f} | rep={rep:.4f}")
+                print(f"[Gen] Line {line_no+1} best score={best_score:.4f}")
 
-        stress_positions.append(sidx)
-        out_text += tokens_to_text(toks)
+            stress_positions.append(best_sidx)
+            out_text += tokens_to_text(best_toks)
 
-        last_id = int(toks[-1])
-        last_tok = id2tok[last_id]
+            h, c = best_h, best_c
+            if best_toks:
+                last_id = int(best_toks[-1])
+                last_tok = id2tok[last_id]
+
+            if ended_poem:
+                break
 
         line_no += 1
 
