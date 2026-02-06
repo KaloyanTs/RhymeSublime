@@ -2,6 +2,8 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 import math
+import csv
+from stress import predict as stress_predict
 
 # ---------------------------------------------------------------------
 # Same phonetic + hard DP utilities as before (for debugging/evaluation).
@@ -89,6 +91,66 @@ def repetition_penalty(line_ids, w_rep, id2tok):
     return pen
 
 
+# ---------------------------
+# Stress lookup and prediction
+# ---------------------------
+
+_STRESS_MAP = None
+
+
+def _load_stress_map(path: str = "bg_dict_csv/single_stress.csv"):
+    mp = {}
+    try:
+        with open(path, "r", encoding="utf-8", newline="") as f:
+            reader = csv.reader(f)
+            for row in reader:
+                if not row or row[0].strip().lower() == "id":
+                    continue
+                if len(row) >= 3:
+                    name = row[1].strip()
+                    stressed = row[2].strip()
+                    if name:
+                        mp[name.lower()] = stressed
+    except Exception:
+        mp = {}
+    return mp
+
+
+def _stress_index_from_stressed(stressed: str, base: str) -> int:
+    i = stressed.find("`")
+    if i <= 0:
+        return 0
+    sidx = i - 1  # backtick is after the stressed character
+    if sidx < 0:
+        sidx = 0
+    if sidx >= len(base):
+        sidx = max(0, len(base) - 1)
+    return sidx
+
+
+def get_stress_index(word: str) -> int:
+    global _STRESS_MAP
+    if _STRESS_MAP is None:
+        _STRESS_MAP = _load_stress_map()
+    stressed = _STRESS_MAP.get(word.lower())
+    if isinstance(stressed, str) and stressed:
+        idx = _stress_index_from_stressed(stressed, word)
+        # print(f"[Stress] Word '{word}': found in map, stressed='{stressed}', idx={idx}")
+        return idx
+    try:
+        idx = int(stress_predict(word))
+        #print(f"[Stress] Word '{word}': predicted stress idx={idx}")
+        return idx
+    except Exception as e:
+        # print(f"[Stress] Word '{word}': stress_predict failed ({e}), searching for vowel")
+        for j in range(len(word) - 1, -1, -1):
+            if word[j] in VOWELS_BG:
+                # print(f"[Stress] Word '{word}': using vowel at idx={j}")
+                return j
+        # print(f"[Stress] Word '{word}': no vowel found, returning 0")
+        return 0
+
+
 @torch.inference_mode()
 def generateText(
     model,
@@ -102,6 +164,8 @@ def generateText(
     w_rep=0.0,
     w_ll=10.0,
     w_rhyme=1.0,
+    stress_predict=None,
+    stress_dict=None,
     debug=False,
 ):
     """
@@ -131,16 +195,44 @@ def generateText(
         parts = letters_only.split()
         return parts[-1] if parts else ""
 
-    def extract_rime(word: str):
+    def extract_rime(line):
+        # Operate on the full line to find the last Cyrillic word, as in generate_token.py
+        line_text = line
+        i = len(line_text) - 1
+        while i >= 0:
+            ch = line_text[i]
+            if is_cyrillic(ch):
+                break
+            i -= 1
+        if i < 0:
+            return "", 0
+        start = i
+        while start >= 0:
+            ch = line_text[start]
+            if not is_cyrillic(ch):
+                break
+            start -= 1
+        word = line_text[start + 1 : i + 1]
         if not word:
             return "", 0
-        # Stress index fallback: last vowel
-        sidx = 0
-        for j in range(len(word) - 1, -1, -1):
-            if word[j] in VOWELS_BG:
-                sidx = j
-                break
-        tail = word[sidx:] if 0 <= sidx < len(word) else ""
+        # Prefer passed-in stress_dict / stress_predict, then fallback
+        sidx = None
+        if stress_dict and word in stress_dict:
+            if debug:
+                print("[Gen] Found cached stress for word:", word)
+            sidx = stress_dict[word]
+        elif stress_predict is not None:
+            if debug:
+                print("[Gen] Predicting stress for word:", word)
+            try:
+                sidx = int(stress_predict(word))
+            except Exception:
+                sidx = None
+        if sidx is None:
+            sidx = get_stress_index(word)
+        if sidx < 0 or sidx >= len(word):
+            return "", 0
+        tail = word[sidx:]
         return tail, sidx
 
     def step(last_id, h, c, last_tok):
@@ -227,12 +319,11 @@ def generateText(
             toks, ll, h_end, c_end, ended_poem = sample_one_line(h, c, last_id, last_tok)
             h, c = h_end, c_end
             if ended_poem:
-                out_text += tokens_to_text(toks)
                 break
 
             line_text = tokens_to_text(toks[:-1])
             last_word = extract_last_word(line_text)
-            tail, sidx = extract_rime(last_word)
+            tail, sidx = extract_rime(line_text)
             base_tail = tail
             last_word_base = last_word
             if debug:
@@ -250,7 +341,7 @@ def generateText(
                 toks, ll, h_end, c_end, ended_poem = sample_one_line(h, c, last_id, last_tok)
                 line_text = tokens_to_text(toks[:-1])
                 cand_word = extract_last_word(line_text)
-                cand_tail, sidx = extract_rime(cand_word)
+                cand_tail, sidx = extract_rime(line_text)
 
                 # Normalize LL by length
                 denom = max(1, len(toks))

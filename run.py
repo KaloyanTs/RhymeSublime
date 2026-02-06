@@ -1,13 +1,9 @@
 import sys
 import generator_char
-import model_char
 import model_char_dp
-import model_transformer
 import model_token
-import train_transformer
 import train_token
 import train_char_dp
-import generator_transformer
 import generate_token
 import generate_char_dp
 import stress
@@ -64,14 +60,6 @@ endChar = '}'
 unkChar = '@'
 padChar = '|'
 
-if len(sys.argv)>1 and sys.argv[1] == 'prepare':
-    testCorpus, trainCorpus, char2id, auth2id =  utils.prepareData(corpusFileName, startChar, endChar, unkChar, padChar, maxPoemLength=maxPoemLength)
-    pickle.dump(testCorpus, open(testDataFileName, 'wb'))
-    pickle.dump(trainCorpus, open(trainDataFileName, 'wb'))
-    pickle.dump(char2id, open(char2idFileName, 'wb'))
-    pickle.dump(auth2id, open(auth2idFileName, 'wb'))
-    print('Data prepared.')
-
 if len(sys.argv)>1 and sys.argv[1] == 'prepare_token':
     print('Preparing data for token LSTM model...')
     testCorpus, trainCorpus, tokens2id, auth2id = utils.prepareData(
@@ -95,64 +83,7 @@ if len(sys.argv)>1 and sys.argv[1] == 'prepare_char_dp':
     pickle.dump(tokens2id, open(tokens2idFileName_dp, 'wb'))
     pickle.dump(auth2id, open(auth2idFileName, 'wb'))
     print('Data prepared.')
-
-if len(sys.argv)>1 and sys.argv[1] == 'train':
-    testCorpus = pickle.load(open(testDataFileName, 'rb'))
-    trainCorpus = pickle.load(open(trainDataFileName, 'rb'))
-    char2id = pickle.load(open(char2idFileName, 'rb'))
-    auth2id = pickle.load(open(auth2idFileName, 'rb'))
-
-    lm = model.LSTMLanguageModelPack(char_emb_size, hid_size, auth2id, char2id, unkChar, padChar, endChar, lstm_layers=lstm_layers, dropout=dropout).to(device)
-    if len(sys.argv)>2: lm.load(sys.argv[2])
-
-    optimizer = torch.optim.Adam(lm.parameters(), lr=learning_rate)
-    train.trainModel(trainCorpus, testCorpus, lm, optimizer, epochs, batchSize)
-    lm.save(modelFileName)
-    print('Model perplexity: ',train.perplexity(lm, testCorpus, batchSize))
-
-if len(sys.argv)>1 and sys.argv[1] == 'perplexity':
-    testCorpus = pickle.load(open(testDataFileName, 'rb'))
-    char2id = pickle.load(open(char2idFileName, 'rb'))
-    auth2id = pickle.load(open(auth2idFileName, 'rb'))
-    lm = model.LSTMLanguageModelPack(char_emb_size, hid_size, auth2id, char2id, unkChar, padChar, endChar, lstm_layers=lstm_layers, dropout=dropout).to(device)
-    lm.load(modelFileName,device)
-    print('Model perplexity: ',train.perplexity(lm, testCorpus, batchSize))
-
-if len(sys.argv)>1 and sys.argv[1] == 'generate':
-    if len(sys.argv)>2: auth = sys.argv[2]
-    else:
-        print('Usage: python run.py generate author [seed [temperature]]')
-    if len(sys.argv)>3: seed = sys.argv[3]
-    else: seed = startChar
-
-    assert seed[0] == startChar
-
-    if len(sys.argv)>4: temperature = float(sys.argv[4])
-    else: temperature = defaultTemperature
- 
-    char2id = pickle.load(open(char2idFileName, 'rb'))
-    auth2id = pickle.load(open(auth2idFileName, 'rb'))
-    lm = model.LSTMLanguageModelPack(char_emb_size, hid_size, auth2id, char2id, unkChar, padChar, endChar, lstm_layers=lstm_layers, dropout=dropout).to(device)
-    lm.load(modelFileName,device)
     
-    authid = auth2id.get(auth,0)
-    if authid==0: print('Авторът не е известен.')
-    print(generator.generateText(lm, char2id, auth, seed, temperature=temperature))
-    
-if len(sys.argv)>1 and sys.argv[1] == 'train_char':
-    testCorpus = pickle.load(open(testDataFileName, 'rb'))
-    trainCorpus = pickle.load(open(trainDataFileName, 'rb'))
-    char2id = pickle.load(open(char2idFileName, 'rb'))
-    auth2id = pickle.load(open(auth2idFileName, 'rb'))
-
-    lm = model_char.LSTMLanguageModelPack(char_emb_size, hid_size, auth2id, char2id, unkChar, padChar, endChar, lstm_layers=lstm_layers, dropout=dropout, k_rhyme=k_rhyme, lambda_rhyme=lambda_rhyme).to(device)
-    if len(sys.argv)>2: lm.load(sys.argv[2])
-
-    optimizer = torch.optim.Adam(lm.parameters(), lr=learning_rate)
-    train_char.trainModel(trainCorpus, testCorpus, lm, optimizer, epochs, batchSize)
-    lm.save(modelFileName)
-    print('Model perplexity: ',train_char.perplexity(lm, testCorpus, batchSize))
-
 if len(sys.argv)>1 and sys.argv[1] == 'train_token':
     testCorpus = pickle.load(open(testDataFileName_token, 'rb'))
     trainCorpus = pickle.load(open(trainDataFileName_token, 'rb'))
@@ -190,13 +121,6 @@ if len(sys.argv)>1 and sys.argv[1] == 'train_char_dp':
     lm.save(modelFileName_dp)
     print('Model perplexity: ', train_char_dp.perplexity(lm, testCorpus, batchSize_dp))
     
-if len(sys.argv)>1 and sys.argv[1] == 'perplexity_char':
-    testCorpus = pickle.load(open(testDataFileName, 'rb'))
-    char2id = pickle.load(open(char2idFileName, 'rb'))
-    auth2id = pickle.load(open(auth2idFileName, 'rb'))
-    lm = model_char.LSTMLanguageModelPack(char_emb_size, hid_size, auth2id, char2id, unkChar, padChar, endChar, lstm_layers=lstm_layers, dropout=dropout, k_rhyme=k_rhyme, lambda_rhyme=lambda_rhyme).to(device)
-    lm.load(modelFileName,device)
-    print('Model perplexity: ',train_char.perplexity(lm, testCorpus, batchSize))
 
 if len(sys.argv)>1 and sys.argv[1] == 'perplexity_token':
     testCorpus = pickle.load(open(testDataFileName_token, 'rb'))
@@ -222,52 +146,6 @@ if len(sys.argv)>1 and sys.argv[1] == 'perplexity_char_dp':
     lm.load(modelFileName_dp, device)
     print('Model perplexity: ', train_char_dp.perplexity(lm, testCorpus, batchSize_dp))
     
-if len(sys.argv)>1 and sys.argv[1] == 'generate_char':
-    if len(sys.argv)>2: auth = sys.argv[2]
-    else:
-        print('Usage: python run.py generate_char author [seed [temperature]]')
-    if len(sys.argv)>3: seed = sys.argv[3]
-    else: seed = startChar
-
-    assert seed[0] == startChar
-
-    if len(sys.argv)>4: temperature = float(sys.argv[4])
-    else: temperature = defaultTemperature
- 
-    char2id = pickle.load(open(char2idFileName, 'rb'))
-    auth2id = pickle.load(open(auth2idFileName, 'rb'))
-    lm = model_char.LSTMLanguageModelPack(char_emb_size, hid_size, auth2id, char2id, unkChar, padChar, endChar, lstm_layers=lstm_layers, dropout=dropout, k_rhyme=k_rhyme, lambda_rhyme=lambda_rhyme).to(device)
-    lm.load(modelFileName,device)
-    
-    stress_dict = load_stress_dict('bg_dict_csv/single_stress.csv')
-    
-    authid = auth2id.get(auth,0)
-    if authid==0: print('Авторът не е известен.')
-    print(generator_char.generateText(lm, char2id, auth, seed, temperature=temperature, stress_predict=stress.predict, stress_dict=stress_dict))
-    
-if len(sys.argv)>1 and sys.argv[1] == 'generate_transformer':
-    if len(sys.argv)>2: auth = sys.argv[2]
-    else:
-        print('Usage: python run.py generate_transformer author [seed [temperature]]')
-    if len(sys.argv)>3: seed = sys.argv[3]
-    else: seed = startChar
-
-    assert seed[0] == startChar
-
-    if len(sys.argv)>4: temperature = float(sys.argv[4])
-    else: temperature = defaultTemperature
- 
-    tokens2id = pickle.load(open(tokens2idFileName_transformer, 'rb'))
-    auth2id = pickle.load(open(auth2idFileName, 'rb'))
-    lm = model_transformer.TransformerLanguageModelPack(char_emb_size_transformer, hid_size_transformer, auth2id, tokens2id, unkChar, padChar, endChar, n_layers=transformer_layers, n_heads=transformer_heads, dropout=dropout, k_rhyme=k_rhyme, lambda_rhyme=lambda_rhyme).to(device)
-    lm.load(modelFileName_transformer,device)
-    
-    stress_dict = load_stress_dict('bg_dict_csv/single_stress.csv')
-    
-    authid = auth2id.get(auth,0)
-    if authid==0: print('Авторът не е известен.')
-    print(generator_transformer.generateText(lm, tokens2id, auth, seed, temperature=temperature, stress_predict=stress.predict, stress_dict=stress_dict))
-
 if len(sys.argv)>1 and sys.argv[1] == 'generate_token':
     
     print(sys.argv)
@@ -303,15 +181,21 @@ if len(sys.argv)>1 and sys.argv[1] == 'generate_token':
     print(generate_token.generateText(lm, tokens2id, auth, seed, temperature=temperature, stress_predict=stress.predict, stress_dict=stress_dict, debug=debug))
 
 if len(sys.argv)>1 and sys.argv[1] == 'generate_char_dp':
+    print(sys.argv)
+    
     if len(sys.argv)>2: auth = sys.argv[2]
     else:
-        print('Usage: python run.py generate_char_dp author [seed [temperature]]')
-    if len(sys.argv)>3: seed = sys.argv[3]
+        print('Usage: python run.py generate_char_dp author [debug [seed [temperature]]]')
+        
+    debug = False
+    if len(sys.argv)>3: debug = True
+        
+    if len(sys.argv)>4: seed = sys.argv[4]
     else: seed = startChar
 
     assert seed[0] == startChar
 
-    if len(sys.argv)>4: temperature = float(sys.argv[4])
+    if len(sys.argv)>5: temperature = float(sys.argv[5])
     else: temperature = defaultTemperature
 
     tokens2id = pickle.load(open(tokens2idFileName_dp, 'rb'))
@@ -322,8 +206,10 @@ if len(sys.argv)>1 and sys.argv[1] == 'generate_char_dp':
         dropout=dropout_dp, lambda_rhyme=lambda_rhyme_dp
     ).to(device)
     lm.load(modelFileName_dp, device)
+    
+    stress_dict = load_stress_dict('bg_dict_csv/single_stress.csv')
 
     authid = auth2id.get(auth,0)
     if authid==0: print('Авторът не е известен.')
-    print(generate_char_dp.generateText(lm, tokens2id, auth, seed, temperature=temperature))
+    print(generate_char_dp.generateText(lm, tokens2id, auth, seed, temperature=temperature, debug=debug, stress_predict=stress.predict, stress_dict=stress_dict))
     

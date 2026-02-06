@@ -2,6 +2,8 @@ import math
 import re
 import torch
 import torch.nn.functional as F
+import csv
+from stress import predict as stress_predict
 
 # ---------------------------------------------------------------------
 # Phonetic feature distance (same as generation code, but used for DP loss)
@@ -31,6 +33,60 @@ for ch, v, p, m in [
     ("щ", 0, 6, 2), ("ь", 0, 0, 0),
 ]:
     PHONETIC_FEATURES[ch] = [0, v, p, m, 0, 0]
+
+
+# ---------------------------
+# Stress lookup and prediction
+# ---------------------------
+
+_STRESS_MAP = None
+
+
+def _load_stress_map(path: str = "bg_dict_csv/single_stress.csv"):
+    mp = {}
+    try:
+        with open(path, "r", encoding="utf-8", newline="") as f:
+            reader = csv.reader(f)
+            for row in reader:
+                if not row or row[0].strip().lower() == "id":
+                    continue
+                if len(row) >= 3:
+                    name = row[1].strip()
+                    stressed = row[2].strip()
+                    if name:
+                        mp[name.lower()] = stressed
+    except Exception:
+        mp = {}
+    print(f"Loaded stress map with {len(mp)} entries from {path}")
+    return mp
+
+
+def _stress_index_from_stressed(stressed: str, base: str) -> int:
+    i = stressed.find("`")
+    if i <= 0:
+        return 0
+    sidx = i - 1
+    if sidx < 0:
+        sidx = 0
+    if sidx >= len(base):
+        sidx = max(0, len(base) - 1)
+    return sidx
+
+
+def _get_stress_index_word(word: str) -> int:
+    global _STRESS_MAP
+    if _STRESS_MAP is None:
+        _STRESS_MAP = _load_stress_map()
+    stressed = _STRESS_MAP.get(word.lower())
+    if isinstance(stressed, str) and stressed:
+        return _stress_index_from_stressed(stressed, word)
+    try:
+        return int(stress_predict(word))
+    except Exception:
+        for j in range(len(word) - 1, -1, -1):
+            if word[j] in VOWELS_BG:
+                return j
+        return 0
 
 
 def phonetic_dist(a: str, b: str) -> float:
@@ -288,12 +344,21 @@ class CharLSTMLanguageModelPack(torch.nn.Module):
         if word_ids.numel() <= 0:
             return None, None, None
 
-        # Stress index: last vowel in word (fallback: 0)
-        sidx = 0
-        for k in range(int(word_ids.numel()) - 1, -1, -1):
-            if self._is_vowel_tok(int(word_ids[k].item())):
-                sidx = k
-                break
+        # Stress index: prefer dictionary/predictor, fallback to last vowel
+        word = ""
+        for t in word_ids:
+            idx = int(t.item())
+            tok = self.id2tok[idx] if 0 <= idx < len(self.id2tok) else ""
+            if isinstance(tok, str):
+                word_part = tok
+            else:
+                word_part = ""
+            word = word + word_part
+        sidx = _get_stress_index_word(word)
+        if sidx < 0:
+            sidx = 0
+        if sidx >= int(word_ids.numel()):
+            sidx = max(0, int(word_ids.numel()) - 1)
 
         tail_ids = word_ids[sidx:].clone()
         tail_start = word_start + sidx
