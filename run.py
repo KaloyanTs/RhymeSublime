@@ -9,6 +9,7 @@ import generate_char_dp
 import model_reversed
 import train_reversed
 import generate_reversed
+import generate_reversed_abab
 import stress
 import torch
 import pandas as pd
@@ -351,6 +352,59 @@ if len(sys.argv)>1 and sys.argv[1] == 'generate_reversed':
     authid = auth2id.get(auth,0)
     if authid==0: print('Авторът не е известен.')
     print(generate_reversed.generateText_rtl_forced_rhyme(
+        lm, tokens2id, auth, seed,
+        temperature=temperature,
+        stress_predict_fn=stress.predict,
+        stress_dict=stress_dict,
+        debug=debug
+    ))
+
+if len(sys.argv)>1 and sys.argv[1] == 'generate_reversed_abab':
+    print(sys.argv)
+
+    if len(sys.argv)>2: auth = sys.argv[2]
+    else:
+        print('Usage: python run.py generate_reversed_abab author [debug [seed [temperature]]]')
+
+    debug = False
+    if len(sys.argv)>3: debug = True
+
+    if len(sys.argv)>4: seed = sys.argv[4]
+    else: seed = startChar
+
+    assert seed[0] == startChar
+
+    if len(sys.argv)>5: temperature = float(sys.argv[5])
+    else: temperature = defaultTemperature
+
+    tokens2id = pickle.load(open(tokens2idFileName_reversed, 'rb'))
+    auth2id = pickle.load(open(auth2idFileName, 'rb'))
+    lm = model_reversed.CharAuthLSTM(
+        vocab_size=len(tokens2id),
+        auth2id=auth2id,
+        emb_dim=char_emb_size_reversed,
+        hidden_dim=hid_size_reversed,
+        lstm_layers=lstm_layers_reversed,
+        dropout=dropout_reversed,
+        unk_token_idx=tokens2id.get(unkChar, 0),
+        line_end_token_idx=tokens2id.get('\n', None),
+        tie_weights=False,
+    ).to(device)
+    try:
+        lm_state = torch.load(modelFileName_reversed, map_location=device)
+        if isinstance(lm_state, dict) and 'model' in lm_state:
+            lm.load_state_dict(lm_state['model'])
+        else:
+            lm.load_state_dict(lm_state)
+    except Exception as e:
+        print('[ReversedABAB] Warning: could not load', modelFileName_reversed, ':', e)
+
+    stress_dict = load_stress_dict('bg_dict_csv/single_stress.csv')
+    print(f"Generating reversed ABAB poem for author '{auth}' with seed '{seed}' and temperature {temperature}...")
+
+    authid = auth2id.get(auth,0)
+    if authid==0: print('Авторът не е известен.')
+    print(generate_reversed_abab.generateText_rtl_abab(
         lm, tokens2id, auth, seed,
         temperature=temperature,
         stress_predict_fn=stress.predict,

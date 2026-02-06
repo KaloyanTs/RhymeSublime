@@ -69,9 +69,9 @@ def plot_reversed_rhyme_vs_K(ppl: float, D: np.ndarray):
     plt.grid(True, which="both", linestyle="--", linewidth=0.5)
     # Optional: include perplexity in title if available
     if not np.isnan(ppl):
-        plt.title(f"Reversed Model (ppl={ppl:.3f})")
+        plt.title(f"CharLSTM-Reverse (перплексия={ppl:.3f})")
     else:
-        plt.title("Reversed Model")
+        plt.title("CharLSTM-Reverse")
     # Single curve; legend is optional. Uncomment if desired.
     # plt.legend()
 
