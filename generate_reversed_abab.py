@@ -2,7 +2,7 @@ import math
 import csv
 import torch
 import torch.nn.functional as F
-from stress import predict as stress_predict  # or pass your own
+from stress import predict as stress_predict
 from dp import rhyme_dp_penalty
 try:
     from closeness import dist as phoneme_dist, letters as BG_LETTERS

@@ -48,8 +48,8 @@ def predict(word: str, ckpt_path: Optional[str] = None) -> int:
     global _DEFAULT_PREDICTOR
     if ckpt_path and ckpt_path != _DEFAULT_PREDICTOR.ckpt_path:
         _DEFAULT_PREDICTOR = _StressPredictor(ckpt_path=ckpt_path)
-    res = _DEFAULT_PREDICTOR.predict(word)
-    predicted_with_stress = word[:res] + "'" + word[res:] if res < len(word) else word + "'"
+    # res = _DEFAULT_PREDICTOR.predict(word)
+    # predicted_with_stress = word[:res] + "'" + word[res:] if res < len(word) else word + "'"
     # print("Predicted stress position:", res, "->", predicted_with_stress)
     return _DEFAULT_PREDICTOR.predict(word)
 

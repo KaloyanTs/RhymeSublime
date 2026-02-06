@@ -1,5 +1,4 @@
 import sys
-import generator_char
 import model_char_dp
 import model_token
 import train_token
@@ -14,14 +13,8 @@ import stress
 import torch
 import pandas as pd
 
-import train_char
 import utils
-import generator
-import train
-import model
 import pickle
-
-import re
 
 VOWELS = set("aeiouyAEIOUY" + "аеиоуъюяАЕИОУЪЮЯ" + "ѝЍ")
 
