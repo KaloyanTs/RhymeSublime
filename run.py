@@ -6,6 +6,9 @@ import train_token
 import train_char_dp
 import generate_token
 import generate_char_dp
+import model_reversed
+import train_reversed
+import generate_reversed
 import stress
 import torch
 import pandas as pd
@@ -121,6 +124,93 @@ if len(sys.argv)>1 and sys.argv[1] == 'train_char_dp':
     lm.save(modelFileName_dp)
     print('Model perplexity: ', train_char_dp.perplexity(lm, testCorpus, batchSize_dp))
     
+if len(sys.argv)>1 and sys.argv[1] == 'train_reversed':
+    # Build raw-text corpora so RTL can be applied BEFORE tokenization
+    with open(corpusFileName_reversed, 'r', encoding='utf-8') as f:
+        poems = f.read().split(utils.corpusSplitString)
+    corpus = []
+    for s in poems:
+        if len(s) > 0:
+            n = s.find('\n')
+            aut = s[:n]
+            poem = s[n+1:]
+            text = startChar + poem[:maxPoemLength_reversed] + endChar
+            corpus.append((aut, text))
+    testCorpus, trainCorpus = utils.splitSentCorpus(corpus, testFraction=0.01)
+
+    tokens2id = pickle.load(open(tokens2idFileName_reversed, 'rb'))
+    auth2id = pickle.load(open(auth2idFileName, 'rb'))
+
+    lm = model_reversed.CharAuthLSTM(
+        vocab_size=len(tokens2id),
+        auth2id=auth2id,
+        emb_dim=char_emb_size_reversed,
+        hidden_dim=hid_size_reversed,
+        lstm_layers=lstm_layers_reversed,
+        dropout=dropout_reversed,
+        unk_token_idx=tokens2id.get(unkChar, 0),
+        line_end_token_idx=tokens2id.get('\n', None),
+        tie_weights=False,
+    ).to(device)
+    if len(sys.argv)>2:
+        # Optional: load a checkpoint; support both raw state_dict and {'model': state_dict}
+        try:
+            lm_state = torch.load(sys.argv[2], map_location=device)
+            if isinstance(lm_state, dict) and 'model' in lm_state:
+                lm.load_state_dict(lm_state['model'])
+            else:
+                lm.load_state_dict(lm_state)
+            print('[Reversed] Loaded checkpoint', sys.argv[2])
+        except Exception as e:
+            print('[Reversed] Warning: could not load', sys.argv[2], ':', e)
+
+    optimizer = torch.optim.Adam(lm.parameters(), lr=learning_rate)
+    train_reversed.trainModel_rtl(
+        trainCorpus, testCorpus, lm, optimizer, epochs, batchSize_reversed,
+        tokens2id=tokens2id, rtl=True, use_amp=True
+    )
+    torch.save(lm.state_dict(), modelFileName_reversed)
+    print('[Reversed] Saved model to', modelFileName_reversed)
+
+if len(sys.argv)>1 and sys.argv[1] == 'perplexity_reversed':
+    # Build raw-text test corpus to match RTL preprocessing
+    with open(corpusFileName_reversed, 'r', encoding='utf-8') as f:
+        poems = f.read().split(utils.corpusSplitString)
+    corpus = []
+    for s in poems:
+        if len(s) > 0:
+            n = s.find('\n')
+            aut = s[:n]
+            poem = s[n+1:]
+            text = startChar + poem[:maxPoemLength_reversed] + endChar
+            corpus.append((aut, text))
+    testCorpus, _trainCorpus = utils.splitSentCorpus(corpus, testFraction=0.01)
+
+    tokens2id = pickle.load(open(tokens2idFileName_reversed, 'rb'))
+    auth2id = pickle.load(open(auth2idFileName, 'rb'))
+
+    lm = model_reversed.CharAuthLSTM(
+        vocab_size=len(tokens2id),
+        auth2id=auth2id,
+        emb_dim=char_emb_size_reversed,
+        hidden_dim=hid_size_reversed,
+        lstm_layers=lstm_layers_reversed,
+        dropout=dropout_reversed,
+        unk_token_idx=tokens2id.get(unkChar, 0),
+        line_end_token_idx=tokens2id.get('\n', None),
+        tie_weights=False,
+    ).to(device)
+    # Load saved reversed model
+    try:
+        lm.load_state_dict(torch.load(modelFileName_reversed, map_location=device))
+    except Exception as e:
+        print('[Reversed] Warning: could not load', modelFileName_reversed, ':', e)
+
+    p = train_reversed.perplexity_rtl(
+        lm, testCorpus, batchSize_reversed, tokens2id=tokens2id, rtl=True, use_amp=True
+    )
+    print('[Reversed] Perplexity:', p)
+    
 
 if len(sys.argv)>1 and sys.argv[1] == 'perplexity_token':
     testCorpus = pickle.load(open(testDataFileName_token, 'rb'))
@@ -212,4 +302,59 @@ if len(sys.argv)>1 and sys.argv[1] == 'generate_char_dp':
     authid = auth2id.get(auth,0)
     if authid==0: print('Авторът не е известен.')
     print(generate_char_dp.generateText(lm, tokens2id, auth, seed, temperature=temperature, debug=debug, stress_predict=stress.predict, stress_dict=stress_dict))
+
+if len(sys.argv)>1 and sys.argv[1] == 'generate_reversed':
+    print(sys.argv)
+
+    if len(sys.argv)>2: auth = sys.argv[2]
+    else:
+        print('Usage: python run.py generate_reversed author [debug [seed [temperature]]]')
+
+    debug = False
+    if len(sys.argv)>3: debug = True
+
+    if len(sys.argv)>4: seed = sys.argv[4]
+    else: seed = startChar
+
+    assert seed[0] == startChar
+
+    if len(sys.argv)>5: temperature = float(sys.argv[5])
+    else: temperature = defaultTemperature
+
+    tokens2id = pickle.load(open(tokens2idFileName_reversed, 'rb'))
+    auth2id = pickle.load(open(auth2idFileName, 'rb'))
+    lm = model_reversed.CharAuthLSTM(
+        vocab_size=len(tokens2id),
+        auth2id=auth2id,
+        emb_dim=char_emb_size_reversed,
+        hidden_dim=hid_size_reversed,
+        lstm_layers=lstm_layers_reversed,
+        dropout=dropout_reversed,
+        unk_token_idx=tokens2id.get(unkChar, 0),
+        line_end_token_idx=tokens2id.get('\n', None),
+        tie_weights=False,
+    ).to(device)
+    try:
+        lm_state = torch.load(modelFileName_reversed, map_location=device)
+        # Support both raw state_dict and {'model': state_dict}
+        if isinstance(lm_state, dict) and 'model' in lm_state:
+            lm.load_state_dict(lm_state['model'])
+        else:
+            lm.load_state_dict(lm_state)
+    except Exception as e:
+        print('[Reversed] Warning: could not load', modelFileName_reversed, ':', e)
+
+    stress_dict = load_stress_dict('bg_dict_csv/single_stress.csv')
+    
+    print(f"Generating reversed poem for author '{auth}' with seed '{seed}' and temperature {temperature}...")
+
+    authid = auth2id.get(auth,0)
+    if authid==0: print('Авторът не е известен.')
+    print(generate_reversed.generateText_rtl_forced_rhyme(
+        lm, tokens2id, auth, seed,
+        temperature=temperature,
+        stress_predict_fn=stress.predict,
+        stress_dict=stress_dict,
+        debug=debug
+    ))
     

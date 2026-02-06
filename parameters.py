@@ -68,3 +68,16 @@ trainDataFileName_dp = 'trainDataDp'
 testDataFileName_dp = 'testDataDp'
 tokens2idFileName_dp = 'char2idDp'
 lambda_rhyme_dp = 0.0
+
+# Reversed Char LSTM (RTL per-line) configuration
+batchSize_reversed = 128
+char_emb_size_reversed = 128
+hid_size_reversed = 512
+lstm_layers_reversed = 3
+dropout_reversed = 0.4
+maxPoemLength_reversed = 10000
+corpusFileName_reversed = 'corpusPoems'
+modelFileName_reversed = 'modelLSTMReversed'
+trainDataFileName_reversed = 'trainDataDp'      # reuse char-DP prepared data
+testDataFileName_reversed = 'testDataDp'        # reuse char-DP prepared data
+tokens2idFileName_reversed = 'char2idDp'        # reuse char-DP tokens

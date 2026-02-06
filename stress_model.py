@@ -11,7 +11,6 @@
 #   python stress_bilstm.py --load stress_model.pt --predict "планина"
 #
 import argparse
-import math
 import random
 from dataclasses import dataclass
 from typing import List, Tuple, Dict, Optional
