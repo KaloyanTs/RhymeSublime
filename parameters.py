@@ -8,7 +8,6 @@ char2idFileName = 'char2id'
 auth2idFileName = 'auth2id'
 
 device = torch.device("cuda:0")
-#device = torch.device("cpu")
 
 batchSize = 64
 char_emb_size = 128
@@ -78,6 +77,6 @@ dropout_reversed = 0.4
 maxPoemLength_reversed = 10000
 corpusFileName_reversed = 'corpusPoems'
 modelFileName_reversed = 'modelLSTMReversed'
-trainDataFileName_reversed = 'trainDataDp'      # reuse char-DP prepared data
-testDataFileName_reversed = 'testDataDp'        # reuse char-DP prepared data
-tokens2idFileName_reversed = 'char2idDp'        # reuse char-DP tokens
+trainDataFileName_reversed = 'trainDataDp'      
+testDataFileName_reversed = 'testDataDp'        
+tokens2idFileName_reversed = 'char2idDp'        
