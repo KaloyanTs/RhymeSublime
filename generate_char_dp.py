@@ -5,11 +5,6 @@ import math
 import csv
 from stress import predict as stress_predict
 
-# ---------------------------------------------------------------------
-# Same phonetic + hard DP utilities as before (for debugging/evaluation).
-# Training uses differentiable DP inside the model.
-# ---------------------------------------------------------------------
-
 VOWELS_BG = set(list("аеиоуъюяѝАЕИОУЪЮЯЍ"))
 
 PHONETIC_FEATURES = {}
@@ -91,10 +86,6 @@ def repetition_penalty(line_ids, w_rep, id2tok):
     return pen
 
 
-# ---------------------------
-# Stress lookup and prediction
-# ---------------------------
-
 _STRESS_MAP = None
 
 
@@ -135,19 +126,14 @@ def get_stress_index(word: str) -> int:
     stressed = _STRESS_MAP.get(word.lower())
     if isinstance(stressed, str) and stressed:
         idx = _stress_index_from_stressed(stressed, word)
-        # print(f"[Stress] Word '{word}': found in map, stressed='{stressed}', idx={idx}")
         return idx
     try:
         idx = int(stress_predict(word))
-        #print(f"[Stress] Word '{word}': predicted stress idx={idx}")
         return idx
     except Exception as e:
-        # print(f"[Stress] Word '{word}': stress_predict failed ({e}), searching for vowel")
         for j in range(len(word) - 1, -1, -1):
             if word[j] in VOWELS_BG:
-                # print(f"[Stress] Word '{word}': using vowel at idx={j}")
                 return j
-        # print(f"[Stress] Word '{word}': no vowel found, returning 0")
         return 0
 
 
@@ -168,10 +154,6 @@ def generateText(
     stress_dict=None,
     debug=False,
 ):
-    """
-    Char-level generator (single-pass per line; no repeated sampling).
-    Assumes tokens2id maps single characters -> ids, and the model was trained with DP rhyme loss.
-    """
     device = next(model.parameters()).device
     model.eval()
 
@@ -196,7 +178,6 @@ def generateText(
         return parts[-1] if parts else ""
 
     def extract_rime(line):
-        # Operate on the full line to find the last Cyrillic word, as in generate_token.py
         line_text = line
         i = len(line_text) - 1
         while i >= 0:
@@ -215,7 +196,6 @@ def generateText(
         word = line_text[start + 1 : i + 1]
         if not word:
             return "", 0
-        # Prefer passed-in stress_dict / stress_predict, then fallback
         sidx = None
         if stress_dict and word in stress_dict:
             if debug:
@@ -259,7 +239,6 @@ def generateText(
         logp = F.log_softmax(logits, dim=-1)
         return int(tid), float(logp[int(tid)].item()), h2, c2
 
-    # Char tokenization: just list the string
     seed_tokens = list(startSentence)
     prefix_ids = [tokens2id.get(t, model.unkTokenIdx) for t in seed_tokens]
 
@@ -267,12 +246,10 @@ def generateText(
     last_tok = seed_tokens[-1] if seed_tokens else ""
     last_id = prefix_ids[-1] if prefix_ids else (tokens2id.get("{", 0) if "{" in tokens2id else 0)
 
-    # Init hidden state from author embeddings (unbatched LSTM mode)
     auth_id_t = torch.tensor(model.auth2id.get(auth, 0), dtype=torch.long, device=device)
     h = model.embed_auth_out(auth_id_t).unsqueeze(0).repeat(model.lstm_layers, 1)
     c = model.embed_auth_cell(auth_id_t).unsqueeze(0).repeat(model.lstm_layers, 1)
 
-    # Feed the prefix
     if prefix_ids:
         inp = torch.tensor(prefix_ids, dtype=torch.long, device=device)
         E = model.embed(inp)
@@ -284,7 +261,6 @@ def generateText(
     stress_positions = []
 
     def sample_one_line(h_start, c_start, last_id_start, last_tok_start):
-        # Returns: toks, ll, h_end, c_end, ended_poem
         h_local = h_start.clone()
         c_local = c_start.clone()
         last_id_local = int(last_id_start)
@@ -302,7 +278,6 @@ def generateText(
             if nxt == nl_id or nxt == stop_id:
                 break
 
-        # Force newline if needed
         if nl_id is not None and toks and toks[-1] != nl_id and toks[-1] != stop_id:
             nxt, lp, h_local, c_local = force(last_id_local, h_local, c_local, last_tok_local, nl_id)
             toks.append(nxt)
@@ -315,7 +290,6 @@ def generateText(
 
     while len(out_text) < limit:
         if line_no % 2 == 0:
-            # Generate base line (odd index human-readable)
             toks, ll, h_end, c_end, ended_poem = sample_one_line(h, c, last_id, last_tok)
             h, c = h_end, c_end
             if ended_poem:
@@ -335,7 +309,6 @@ def generateText(
             last_id = int(toks[-1])
             last_tok = id2tok[last_id]
         else:
-            # Sample K candidates and pick best based on rhyme DP and repetition
             candidates = []
             for _ in range(max(1, int(K))):
                 toks, ll, h_end, c_end, ended_poem = sample_one_line(h, c, last_id, last_tok)
@@ -343,7 +316,6 @@ def generateText(
                 cand_word = extract_last_word(line_text)
                 cand_tail, sidx = extract_rime(line_text)
 
-                # Normalize LL by length
                 denom = max(1, len(toks))
                 ll_norm = ll / denom
                 rhyme_loss = rhyme_penalty_str(base_tail, cand_tail)
@@ -355,7 +327,6 @@ def generateText(
 
                 candidates.append((score, toks, h_end, c_end, ended_poem, sidx))
 
-                # Keep candidates sorted for potential early pruning (optional)
                 candidates.sort(key=lambda x: x[0], reverse=True)
 
             best_score, best_toks, best_h, best_c, ended_poem, best_sidx = candidates[0]
@@ -378,7 +349,6 @@ def generateText(
         if stop_id is not None and last_id == stop_id:
             break
 
-    # Insert stress marks in the last word of each line (apostrophe), same as old generator
     final = ""
     lines = out_text.splitlines()
     for l, sidx in zip(lines, stress_positions):

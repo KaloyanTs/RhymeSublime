@@ -2,18 +2,14 @@ import math
 import argparse
 import sys
 
-# Phonetic feature vectors for Bulgarian lowercase letters (Cyrillic)
-# Feature dims: [vowel(0/1), voicing(0/1), place(0..6), manner(0..6), height(0..3), backness(0..3)]
 PHONETIC_FEATURES = {}
 
-# Vowels: (char, height, backness)
 for ch, h, b in [
     ("а", 3, 3), ("е", 2, 1), ("и", 1, 1), ("о", 2, 3),
     ("у", 1, 3), ("ъ", 2, 2), ("я", 3, 1), ("ю", 1, 3),
 ]:
     PHONETIC_FEATURES[ch] = [1, 1, 0, 0, h, b]
 
-# Consonants: (char, voicing, place, manner)
 for ch, v, p, m in [
     ("б", 1, 1, 1), ("п", 0, 1, 1),
     ("в", 1, 2, 2), ("ф", 0, 2, 2),

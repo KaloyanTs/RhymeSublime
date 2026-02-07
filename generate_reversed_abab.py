@@ -11,9 +11,6 @@ except Exception:
     BG_LETTERS = list("абвгдежзийклмнопрстуфхцчшщъьюя")
 
 
-# ---------------------------
-# RTL <-> LTR helpers
-# ---------------------------
 def reverse_each_line_keep_braces(text: str) -> str:
     """
     Reverse characters inside each line, keep line order.
@@ -42,9 +39,6 @@ def rtl_to_ltr_poem(text_rtl: str) -> str:
     return "\n".join(p[::-1] for p in parts)
 
 
-# ---------------------------
-# Stress utils
-# ---------------------------
 VOWELS_BG = set(list("аеиоуъюяѝАЕИОУЪЮЯЍ"))
 _STRESS_MAP = None
 
@@ -158,9 +152,6 @@ def add_stress_marks_last_word(poem_ltr: str, *, stress_predict_fn=None, stress_
     return "\n".join(out_lines) + ("\n" if poem_ltr.endswith("\n") else "")
 
 
-# ---------------------------
-# Generation: ABAB (1,2 free; 3 rhymes with 1; 4 rhymes with 2)
-# ---------------------------
 @torch.inference_mode()
 def generateText_rtl_abab(
     model,
@@ -407,14 +398,12 @@ def generateText_rtl_abab(
 
         stage = line_no % 4
         if stage in (0, 1):
-            # 1st and 2nd lines: free sampling
             toks, ll, h, c, ended = sample_line(
                 h, c, last_id, last_tok,
                 forced_prefix_ids=forced,
                 forced_prefix_chars=forced_chars,
             )
         else:
-            # 3rd depends on 1st (A), 4th depends on 2nd (B)
             tail_ltr = base_tail_A if stage == 2 else base_tail_B
             last_word_base = base_last_word_A if stage == 2 else base_last_word_B
             if tail_ltr:

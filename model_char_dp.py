@@ -5,9 +5,6 @@ import torch.nn.functional as F
 import csv
 from stress import predict as stress_predict
 
-# ---------------------------------------------------------------------
-# Phonetic feature distance (same as generation code, but used for DP loss)
-# ---------------------------------------------------------------------
 
 VOWELS_BG = set(list("аеиоуъюяѝАЕИОУЪЮЯЍ"))
 
@@ -33,11 +30,6 @@ for ch, v, p, m in [
     ("щ", 0, 6, 2), ("ь", 0, 0, 0),
 ]:
     PHONETIC_FEATURES[ch] = [0, v, p, m, 0, 0]
-
-
-# ---------------------------
-# Stress lookup and prediction
-# ---------------------------
 
 _STRESS_MAP = None
 
@@ -90,10 +82,6 @@ def _get_stress_index_word(word: str) -> int:
 
 
 def phonetic_dist(a: str, b: str) -> float:
-    """
-    Distance between Bulgarian letters based on a small handcrafted feature vector.
-    Unknowns default to 1.0 (same behavior as your original code).
-    """
     if a == b:
         return 0.0
     a_l = a.lower()
@@ -106,10 +94,6 @@ def phonetic_dist(a: str, b: str) -> float:
 
 
 def build_phon_cost_matrix(id2tok):
-    """
-    Build C[v_pred, v_tgt] = phonetic_dist(tok_pred, tok_tgt).
-    Safe for non-letter/special tokens (falls back to 1.0).
-    """
     V = len(id2tok)
     C = torch.empty((V, V), dtype=torch.float32)
     for i in range(V):
@@ -120,9 +104,6 @@ def build_phon_cost_matrix(id2tok):
     return C
 
 
-# ---------------------------------------------------------------------
-# Differentiable DP: soft edit-distance with expected phonetic sub cost
-# ---------------------------------------------------------------------
 
 def softmin3(a, b, c, gamma: float):
     """
@@ -140,28 +121,18 @@ def rhyme_dp_loss_from_logits(
     gamma: float = 1.0,
     first_char_mismatch_cost: float = 10.0,
 ):
-    """
-    Differentiable version of rhyme_penalty_str(base_tail, cand_tail), but:
-      - cand_tail is represented by a *sequence of logits* (teacher-forced positions)
-      - substitution cost is expected phonetic distance under p(char|context)
-      - min is replaced by softmin (entropic smoothing)
 
-    Returns a scalar tensor (0-dim).
-    """
     T, V = tail_logits.shape
     M = int(target_idx.numel())
 
     if T <= 0 or M <= 0:
         return tail_logits.new_zeros(())
 
-    # probs over predicted chars
     p = F.softmax(tail_logits, dim=-1)  # [T, V]
 
-    # substitution costs: sub[t, j] = sum_v p[t,v] * C[v, target[j]]
     C_cols = phon_cost[:, target_idx]        # [V, M]
     sub = p @ C_cols                         # [T, M]
 
-    # DP table (soft edit distance)
     dp = tail_logits.new_empty((T + 1, M + 1))
     dp[0, 0] = 0.0
     for i in range(1, T + 1):
@@ -178,28 +149,18 @@ def rhyme_dp_loss_from_logits(
                 gamma=gamma,
             )
 
-    # Differentiable "first char mismatch + 10":
-    # penalty = 10 * (1 - P(pred_first == target_first))
     first_tgt = int(target_idx[0].item())
     first_match_prob = p[0, first_tgt]
     return dp[T, M] + first_char_mismatch_cost * (1.0 - first_match_prob)
 
 
-# ---------------------------------------------------------------------
-# Char LSTM LM + differentiable DP rhyme loss
-# ---------------------------------------------------------------------
 
 def _is_cyrillic_char(ch: str) -> bool:
     return ('\u0400' <= ch <= '\u04FF') or ('\u0500' <= ch <= '\u052F')
 
 
 class CharLSTMLanguageModelPack(torch.nn.Module):
-    """
-    Same structure as TokenLSTMLanguageModelPack, but assumes the input sequence
-    is already a list of *char tokens*.
 
-    Total loss = LM cross-entropy + lambda_rhyme * differentiable DP rhyme loss.
-    """
 
     def preparePaddedBatch(self, source):
         device = next(self.parameters()).device
@@ -261,10 +222,8 @@ class CharLSTMLanguageModelPack(torch.nn.Module):
         self.spaceTokenIdx = word2ind.get(" ", None)
         self.lineEndTokenIdx = word2ind.get("\n", None)
 
-        # Weight of the DP rhyme loss (kept name for compatibility with old training scripts)
         self.lambda_rhyme = float(lambda_rhyme)
 
-        # DP hyperparams
         self.dp_gamma = float(dp_gamma)
         self.dp_ins_del_cost = float(dp_ins_del_cost)
         self.dp_first_char_cost = float(dp_first_char_cost)
@@ -279,13 +238,11 @@ class CharLSTMLanguageModelPack(torch.nn.Module):
         self.embed_auth_out = torch.nn.Embedding(len(auth2id), hidden_size)
         self.projection = torch.nn.Linear(hidden_size, len(word2ind))
 
-        # id -> token mapping
         self.id2tok = [None] * len(word2ind)
         for tok, i in word2ind.items():
             if 0 <= i < len(self.id2tok):
                 self.id2tok[i] = tok
 
-        # Phonetic cost matrix as a buffer (moves with .to(device))
         C = build_phon_cost_matrix(self.id2tok)
         self.register_buffer("phon_cost", C)
 
@@ -312,20 +269,9 @@ class CharLSTMLanguageModelPack(torch.nn.Module):
         return tok in VOWELS_BG
 
     def _extract_tail_span(self, yb: torch.Tensor, start: int, end_excl: int):
-        """
-        Extract rhyme tail from the last word in yb[start:end_excl] (excluding newline).
-        Tail starts at the last vowel in the last word (fallback: whole last word).
-
-        Returns:
-          tail_ids (1D LongTensor, on same device as yb),
-          tail_start_idx (int, index into yb),
-          tail_end_idx (int, index into yb)
-        If no valid tail found, returns (None, None, None).
-        """
         if end_excl <= start:
             return None, None, None
 
-        # Find last Cyrillic letter in the line
         i = end_excl - 1
         while i >= start and not self._is_cyrillic_tok(int(yb[i].item())):
             i -= 1
@@ -334,17 +280,15 @@ class CharLSTMLanguageModelPack(torch.nn.Module):
 
         tail_end = i
 
-        # Find start of last word (contiguous Cyrillic letters)
         j = tail_end
         while j >= start and self._is_cyrillic_tok(int(yb[j].item())):
             j -= 1
         word_start = j + 1
-        word_ids = yb[word_start:tail_end + 1]  # includes only Cyrillic letters
+        word_ids = yb[word_start:tail_end + 1]  
 
         if word_ids.numel() <= 0:
             return None, None, None
 
-        # Stress index: prefer dictionary/predictor, fallback to last vowel
         word = ""
         for t in word_ids:
             idx = int(t.item())
@@ -363,7 +307,6 @@ class CharLSTMLanguageModelPack(torch.nn.Module):
         tail_ids = word_ids[sidx:].clone()
         tail_start = word_start + sidx
 
-        # Optional cap on tail length for speed
         if self.dp_tail_max and tail_ids.numel() > self.dp_tail_max:
             tail_ids = tail_ids[-self.dp_tail_max:].clone()
             tail_start = tail_end - int(tail_ids.numel()) + 1
@@ -371,11 +314,7 @@ class CharLSTMLanguageModelPack(torch.nn.Module):
         return tail_ids, int(tail_start), int(tail_end)
 
     def _rhyme_loss_dp(self, logits_seq, y, source_lengths):
-        """
-        Differentiable DP rhyme loss:
-        For each pair of consecutive lines (separated by '\n'), encourage the current line's
-        tail to match the previous line's tail, using soft edit distance with phonetic substitution cost.
-        """
+
         if self.lambda_rhyme <= 0.0 or self.lineEndTokenIdx is None:
             return logits_seq.new_tensor(0.0)
 
@@ -394,7 +333,6 @@ class CharLSTMLanguageModelPack(torch.nn.Module):
             if nl_pos.numel() < 2:
                 continue
 
-            # Build line spans: [start, end_excl) for each line (excluding newline)
             nl_list = nl_pos.tolist()
             spans = []
             s = 0
@@ -406,7 +344,6 @@ class CharLSTMLanguageModelPack(torch.nn.Module):
             if len(spans) < 2:
                 continue
 
-            # Compare each line with the previous one (couplet-style)
             for k in range(1, len(spans)):
                 prev_start, prev_end = spans[k - 1]
                 cur_start, cur_end = spans[k]
@@ -419,7 +356,6 @@ class CharLSTMLanguageModelPack(torch.nn.Module):
                 if base_tail_ids.numel() <= 0 or cand_tail_ids.numel() <= 0:
                     continue
 
-                # logits for the candidate tail positions
                 tail_logits = logits_b[cand_t_start:cand_t_end + 1, :]  # [T, V]
                 target_idx = base_tail_ids.to(dtype=torch.long)
 

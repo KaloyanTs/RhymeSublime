@@ -201,7 +201,6 @@ def main():
                     'pairs': n_pairs,
                     'lines': n_lines,
                 })
-        # Save consolidated results
         out_name = args.out if args.out else f"{'_'.join(args.models)}.res"
         try:
             with open(out_name, 'w', encoding='utf-8') as f:
@@ -211,7 +210,6 @@ def main():
             print(f"[Save] Wrote consolidated results to {out_name}")
         except Exception as e:
             print(f"Warning: failed to save results to {out_name}: {e}")
-        # Final summary per model and K
         print("[Final] Average rhyme penalty per model and K:")
         by_model = {}
         for r in results:

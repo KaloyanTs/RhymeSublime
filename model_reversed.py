@@ -8,17 +8,6 @@ import torch.nn.functional as F
 
 
 class CharAuthLSTM(nn.Module):
-    """
-    Char-level LM with author-conditioned initial hidden/cell state.
-
-    IMPORTANT:
-      - "Right-to-left" poems are achieved ONLY via 1rocessing (reverse each line's characters).
-      - Standard training: next-char cross-entropy (no rhyme loss).
-
-    Compatibility with your generator:
-      - attributes: embed, lstm, projection, auth2id, unkTokenIdx, lineEndTokenIdx,
-                    embed_auth_out, embed_auth_cell, lstm_layers
-    """
 
     def __init__(
         self,
@@ -51,7 +40,6 @@ class CharAuthLSTM(nn.Module):
         self.dropout = float(dropout)
         self.loss_ignore_index = int(loss_ignore_index)
 
-        # Keep these names for compatibility with existing code.
         self.unkTokenIdx = int(unk_token_idx)
         self.lineEndTokenIdx = int(line_end_token_idx) if line_end_token_idx is not None else None
         self.auth2id = dict(auth2id)
@@ -60,7 +48,6 @@ class CharAuthLSTM(nn.Module):
 
         self.embed = nn.Embedding(self.vocab_size, self.emb_dim)
 
-        # Author-conditioned init state (replicated across layers).
         self.embed_auth_out = nn.Embedding(self.num_authors, self.hidden_dim)
         self.embed_auth_cell = nn.Embedding(self.num_authors, self.hidden_dim)
 
@@ -94,15 +81,10 @@ class CharAuthLSTM(nn.Module):
 
     @torch.no_grad()
     def flatten_lstm_parameters(self) -> None:
-        """Call after moving to CUDA for a small cuDNN speed bump."""
         self.lstm.flatten_parameters()
 
     def init_state(self, author_ids: torch.LongTensor) -> Tuple[torch.Tensor, torch.Tensor]:
-        """
-        author_ids:
-          - scalar -> returns (L, H) unbatched
-          - (B,)   -> returns (L, B, H) batched
-        """
+
         if author_ids.dtype != torch.long:
             raise TypeError("author_ids must be torch.long")
 
@@ -132,7 +114,6 @@ class CharAuthLSTM(nn.Module):
             raise TypeError("input_ids must be torch.long")
 
         if input_ids.dim() == 1:
-            # (T,)
             if hx is None:
                 hx = self.init_state(author_ids)  # (L,H)
             x = self.embed(input_ids)            # (T,E)
@@ -141,7 +122,6 @@ class CharAuthLSTM(nn.Module):
             return logits, (hT, cT)
 
         if input_ids.dim() == 2:
-            # (T,B)
             if hx is None:
                 hx = self.init_state(author_ids)  # (L,B,H)
             x = self.embed(input_ids)             # (T,B,E)
@@ -167,20 +147,17 @@ class CharAuthLSTM(nn.Module):
     ]:
         logits, (hT, cT) = self._compute_logits(input_ids, author_ids, hx)
 
-        # Build targets / align shapes for CE.
         if target_ids is None:
             if input_ids.size(0) < 2:
                 raise ValueError("Need T>=2 to compute shifted LM loss when target_ids is None")
 
             if input_ids.dim() == 1:
-                # logits: (T,V) -> use first T-1
                 logits_for_loss = logits[:-1, :]         # (T-1,V)
                 targets = input_ids[1:]                  # (T-1,)
                 loss = F.cross_entropy(
                     logits_for_loss, targets, ignore_index=self.loss_ignore_index
                 )
             else:
-                # logits: (T,B,V) -> use first T-1
                 logits_for_loss = logits[:-1, :, :]      # (T-1,B,V)
                 targets = input_ids[1:, :]               # (T-1,B)
                 loss = F.cross_entropy(
@@ -192,22 +169,17 @@ class CharAuthLSTM(nn.Module):
             if target_ids.dtype != torch.long:
                 raise TypeError("target_ids must be torch.long")
 
-            # If target_ids matches input_ids length, align with logits length.
-            # You can also pass already-aligned target_ids (same leading dims as logits).
             if input_ids.dim() == 1:
-                # logits: (T,V)
                 if target_ids.dim() != 1:
                     raise ValueError("target_ids must be (T,) for unbatched input")
                 if target_ids.size(0) == logits.size(0):
                     loss = F.cross_entropy(logits, target_ids, ignore_index=self.loss_ignore_index)
                 else:
-                    # assume already aligned (e.g., (T-1,))
                     if target_ids.size(0) != logits.size(0):
                         # allow logits trimmed externally; safest is to require equality here
                         raise ValueError("target_ids length must match logits length for loss")
                     loss = F.cross_entropy(logits, target_ids, ignore_index=self.loss_ignore_index)
             else:
-                # logits: (T,B,V)
                 if target_ids.dim() != 2:
                     raise ValueError("target_ids must be (T,B) for batched input")
                 if target_ids.size(0) != logits.size(0) or target_ids.size(1) != logits.size(1):
@@ -222,5 +194,4 @@ class CharAuthLSTM(nn.Module):
             return loss
         if return_logits and not return_state:
             return loss, logits
-        # return_state=True
         return loss, logits if return_logits else loss, (hT, cT)

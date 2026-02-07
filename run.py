@@ -22,8 +22,6 @@ def load_stress_dict(csv_path):
     """Load stress dictionary from CSV with format: word,stress_index"""
     try:
         df = pd.read_csv(csv_path)
-        # Assume CSV has columns: word (plain), stress_index (int)
-        # Or if it has 'name' and 'name_stressed' like the training data
         stress_dict = {}
         print(f"Loading stress dictionary from {csv_path}...")
         if 'name_stressed' in df.columns and 'name' in df.columns:
@@ -31,12 +29,9 @@ def load_stress_dict(csv_path):
             for _, row in df.iterrows():
                 word = str(row['name']).strip()
                 idx = row['name_stressed'].find("`")
-                # print(f"  Processing word: {word}, stressed form: {row['name_stressed']}, stress index: {idx}")
                 if word and idx >= 1:
                     stress_dict[word] = idx  - 1
-                    # print(f"    Added to dictionary: {word} -> {word[:idx-1]} + '`' + {word[idx-1:]}")
         elif 'name_stressed' in df.columns:
-            # Parse backtick format: "ава`нпост" -> ("аванпост", 3)
             from stress_model import parse_stress_backtick
             for _, row in df.iterrows():
                 stressed = str(row['name_stressed'])
@@ -44,7 +39,6 @@ def load_stress_dict(csv_path):
                 if parsed:
                     word, idx = parsed
                     stress_dict[word] = idx
-        # print(f"Loaded {len(stress_dict)} words from stress dictionary")
         return stress_dict
     except Exception as e:
         print(f"Warning: Could not load stress dictionary from {csv_path}: {e}")
@@ -119,7 +113,6 @@ if len(sys.argv)>1 and sys.argv[1] == 'train_char_dp':
     print('Model perplexity: ', train_char_dp.perplexity(lm, testCorpus, batchSize_dp))
     
 if len(sys.argv)>1 and sys.argv[1] == 'train_reversed':
-    # Build raw-text corpora so RTL can be applied BEFORE tokenization
     with open(corpusFileName_reversed, 'r', encoding='utf-8') as f:
         poems = f.read().split(utils.corpusSplitString)
     corpus = []
@@ -147,7 +140,6 @@ if len(sys.argv)>1 and sys.argv[1] == 'train_reversed':
         tie_weights=False,
     ).to(device)
     if len(sys.argv)>2:
-        # Optional: load a checkpoint; support both raw state_dict and {'model': state_dict}
         try:
             lm_state = torch.load(sys.argv[2], map_location=device)
             if isinstance(lm_state, dict) and 'model' in lm_state:
@@ -167,7 +159,6 @@ if len(sys.argv)>1 and sys.argv[1] == 'train_reversed':
     print('[Reversed] Saved model to', modelFileName_reversed)
 
 if len(sys.argv)>1 and sys.argv[1] == 'perplexity_reversed':
-    # Build raw-text test corpus to match RTL preprocessing
     with open(corpusFileName_reversed, 'r', encoding='utf-8') as f:
         poems = f.read().split(utils.corpusSplitString)
     corpus = []
@@ -194,7 +185,6 @@ if len(sys.argv)>1 and sys.argv[1] == 'perplexity_reversed':
         line_end_token_idx=tokens2id.get('\n', None),
         tie_weights=False,
     ).to(device)
-    # Load saved reversed model
     try:
         lm.load_state_dict(torch.load(modelFileName_reversed, map_location=device))
     except Exception as e:
@@ -380,7 +370,6 @@ if len(sys.argv)>1 and sys.argv[1] == 'generate_reversed':
     ).to(device)
     try:
         lm_state = torch.load(modelFileName_reversed, map_location=device)
-        # Support both raw state_dict and {'model': state_dict}
         if isinstance(lm_state, dict) and 'model' in lm_state:
             lm.load_state_dict(lm_state['model'])
         else:
