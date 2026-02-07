@@ -2,7 +2,7 @@ import math
 import csv
 import torch
 import torch.nn.functional as F
-from stress import predict as stress_predict  # or pass your own
+from stress import predict as stress_predict
 from dp import rhyme_dp_penalty
 try:
     from closeness import dist as phoneme_dist, letters as BG_LETTERS
@@ -11,9 +11,6 @@ except Exception:
     BG_LETTERS = list("абвгдежзийклмнопрстуфхцчшщъьюя")
 
 
-# ---------------------------
-# RTL <-> LTR helpers
-# ---------------------------
 def reverse_each_line_keep_braces(text: str) -> str:
     """
     Reverse characters inside each line, keep line order.
@@ -42,9 +39,6 @@ def rtl_to_ltr_poem(text_rtl: str) -> str:
     return "\n".join(p[::-1] for p in parts)
 
 
-# ---------------------------
-# Stress utils (same idea as old generator)
-# ---------------------------
 VOWELS_BG = set(list("аеиоуъюяѝАЕИОУЪЮЯЍ"))
 _STRESS_MAP = None
 
@@ -168,9 +162,6 @@ def add_stress_marks_last_word(poem_ltr: str, *, stress_predict_fn=None, stress_
     return "\n".join(out_lines) + ("\n" if poem_ltr.endswith("\n") else "")
 
 
-# ---------------------------
-# Generation: odd lines free, even lines forced-rhyme
-# ---------------------------
 @torch.inference_mode()
 def generateText_rtl_forced_rhyme(
     model,
@@ -313,9 +304,7 @@ def generateText_rtl_forced_rhyme(
             print(f"[Step] force prev='{prev_tok}' id={prev_id} -> id={tid} tok='{tok}' lp={lp:.4f}")
         return tid, float(logp[tid].item()), h1, c1
 
-    # Phonetic-sensitive forcing: sample a close replacement using exp(-alpha * dist)
     letter_id_map = {}
-    # Only lowercase Bulgarian letters as substitution candidates
     for ch in BG_LETTERS:
         if ch in tokens2id:
             letter_id_map[ch] = tokens2id[ch]
@@ -337,16 +326,14 @@ def generateText_rtl_forced_rhyme(
                 print(f"[Step] force(no-phoneme) prev='{prev_tok}' id={prev_id} target='{target_char}' -> id={tid} tok='{tok}' lp={lp:.4f}")
             return tid, float(logp[tid].item()), h1, c1
 
-        # Compute weights: exp(-alpha * dist(target, candidate))
         candidates = []
         weights = []
         for cand_char, cand_id in letter_id_map.items():
-            c_lower = cand_char  # candidates are already lowercase
+            c_lower = cand_char
             d = float(phoneme_dist(t_lower, c_lower)) if phoneme_dist else (0.0 if t_lower == c_lower else 1.0)
             w = math.exp(-float(alpha_phonetic) * d)
             candidates.append(int(cand_id))
             weights.append(w)
-        # Normalize and sample
         if not candidates:
             tid = tokens2id.get(target_char, model.unkTokenIdx)
         else:
@@ -404,7 +391,6 @@ def generateText_rtl_forced_rhyme(
                             print(f"[Line] early-end on forced id tid={tid}")
                         return toks, ll, h, c, (tid == stop_id)
 
-        # Then sample remainder
         budget = max(1, int(max_line_len) - len(toks))
         if debug:
             print(f"[Line] sampling budget={budget}")
@@ -419,7 +405,6 @@ def generateText_rtl_forced_rhyme(
                     print(f"[Line] break on token id={nxt} tok='{ptok}'")
                 break
 
-        # Force newline if needed (unless stop)
         if nl_id is not None and toks and toks[-1] not in (nl_id, stop_id):
             tid, lp, h, c = step_force(pid, h, c, ptok, int(nl_id))
             toks.append(tid)
@@ -443,11 +428,9 @@ def generateText_rtl_forced_rhyme(
     while len(out_rtl) < int(limit):
         if debug:
             print(f"[Loop] line_no={line_no+1} mode={'odd' if line_no % 2 == 0 else 'even'}")
-        # Initialize forced prefix holders to avoid UnboundLocalError
         forced = None
         forced_chars = None
         if line_no % 2 == 0:
-            # Odd human-readable line: sample normally (RTL)
             forced = None
             toks, ll, h, c, ended = sample_line(
                 h, c, last_id, last_tok,
@@ -455,8 +438,6 @@ def generateText_rtl_forced_rhyme(
                 forced_prefix_chars=forced_chars,
             )
         else:
-            # Even human-readable line: force rhyme tail (as LTR ending => RTL prefix),
-            # allow phonetic substitutions with exp(-alpha * distance), and sample K candidates
             forced = None
             forced_chars = None
             if base_tail_ltr:
@@ -482,7 +463,6 @@ def generateText_rtl_forced_rhyme(
                         forced_prefix_ids=forced,
                         forced_prefix_chars=forced_chars,
                     )
-                    # Evaluate rhyme penalty in LTR view
                     line_rtl_k = tok2text(tk[:-1]) if tk and tk[-1] in (nl_id, stop_id) else tok2text(tk)
                     line_ltr_k = line_rtl_k[::-1]
                     cand_tail_k, _ = extract_rime_ltr(
@@ -508,15 +488,11 @@ def generateText_rtl_forced_rhyme(
         if not toks:
             break
 
-        # Update state
         last_id = int(toks[-1])
         last_tok = id2tok[last_id]
 
-        # Append to RTL output
         out_rtl += tok2text(toks)
 
-        # Extract tail after odd lines (from LTR view of the just-generated line)
-        # Note: toks includes newline/stop; remove it for the "line text"
         line_rtl = tok2text(toks[:-1]) if toks[-1] in (nl_id, stop_id) else tok2text(toks)
         line_ltr = line_rtl[::-1]
         if line_no % 2 == 0:

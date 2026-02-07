@@ -6,24 +6,7 @@ from typing import Any, Dict, Optional, Tuple
 
 
 VOWELS_BG = set(
-    [
-        "а",
-        "е",
-        "и",
-        "о",
-        "у",
-        "ъ",
-        "ю",
-        "я",
-        "А",
-        "Е",
-        "И",
-        "О",
-        "У",
-        "Ъ",
-        "Ю",
-        "Я",
-    ]
+    ["а","е","и","о","у","ъ","ю","я","А","Е","И","О","У","Ъ","Ю","Я"]
 )
 
 
@@ -102,7 +85,6 @@ def derive_name_and_stressed(
     if not name:
         return None
 
-    # If a pre-stressed string exists, prefer it
     stressed_keys = []
     if stress_key:
         stressed_keys.append(stress_key)
@@ -117,7 +99,6 @@ def derive_name_and_stressed(
         if isinstance(v, str) and "`" in v:
             return name, v
 
-    # Otherwise, try index-based fields
     index_fields = [
         "stress_index",
         "accent_index",
@@ -132,7 +113,6 @@ def derive_name_and_stressed(
             except Exception:
                 pass
 
-    # Try syllable-based fields
     syll_fields = ["stress_syllable", "accent_syllable", "syllable"]
     for k in syll_fields:
         v = obj.get(k)
@@ -142,7 +122,6 @@ def derive_name_and_stressed(
             except Exception:
                 pass
 
-    # If mode is forced, attempt conversion based on provided stress_key value
     if stress_key and stress_key in obj:
         v = obj[stress_key]
         if isinstance(v, str) and "`" in v:
@@ -156,8 +135,6 @@ def derive_name_and_stressed(
             except Exception:
                 pass
 
-    # As a last resort, if we find any accent mark commonly used, convert to backtick
-    # Common accents: acute (´), grave (`), apostrophe ('), double quote (")
     for k in stressed_keys:
         v = obj.get(k)
         if isinstance(v, str):
@@ -165,13 +142,9 @@ def derive_name_and_stressed(
             if "`" in s:
                 return name, s
             if "´" in s or "'" in s or "ˈ" in s:
-                # Normalize to backtick: insert after the accented character
-                # Find first accent occurrence and replace with backtick at that position
-                # Simplistic approach: remove the accent and place a backtick after preceding char
                 for i, ch in enumerate(s):
                     if ch in {"´", "'", "ˈ"}:
                         base = s[:i] + s[i + 1 :]
-                        # backtick after previous char (i-1)
                         idx = max(0, i - 1)
                         return name, insert_backtick_char(base, idx)
 
@@ -191,13 +164,11 @@ def process_jsonl(
     added = 0
     skipped = 0
 
-    # Open CSV for append (create if not exists)
     os.makedirs(os.path.dirname(csv_path), exist_ok=True)
     csv_file_exists = os.path.exists(csv_path)
     out_f = open(csv_path, "a", encoding="utf-8", newline="")
     writer = csv.writer(out_f)
 
-    # If file doesn't exist, write header
     if not csv_file_exists:
         writer.writerow(["id", "name", "name_stressed"])
 
@@ -212,7 +183,6 @@ def process_jsonl(
                 skipped += 1
                 continue
 
-            # Prefer explicit forms list if present (Beron JSONL schema)
             forms = obj.get("forms")
             processed_any = False
             if isinstance(forms, list):
@@ -222,10 +192,8 @@ def process_jsonl(
                     name = fo.get("form")
                     si = fo.get("stress_index")
 
-                    # Skip if missing name or stress index
                     if not isinstance(name, str) or not name.strip():
                         continue
-                    # stress_index might be string; normalize
                     if si is None:
                         continue
                     if isinstance(si, str):
@@ -239,7 +207,6 @@ def process_jsonl(
                     elif not isinstance(si, int):
                         continue
 
-                    # Convert from 1-based to 0-based char index
                     char_idx = si - 1
                     try:
                         name_stressed = insert_backtick_char(name, char_idx)
@@ -264,7 +231,6 @@ def process_jsonl(
                     if dedup:
                         existing_names.add(name)
 
-            # Fallback path: derive from top-level fields
             if not processed_any:
                 derived = derive_name_and_stressed(obj, base_key, stress_key, stress_mode)
                 if not derived:

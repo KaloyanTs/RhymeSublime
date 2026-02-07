@@ -1,15 +1,3 @@
-# stress_bilstm.py
-# Train a char-level BiLSTM to predict Bulgarian word stress position
-# using vislupus/bulgarian-dictionary-raw-data (name_stressed uses backticks ` after the stressed vowel).
-#
-# Install: pip install torch pandas numpy
-#
-# Train:
-#   python stress_bilstm.py --csv words_combined.csv --out stress_model.pt --epochs 10
-#
-# Predict:
-#   python stress_bilstm.py --load stress_model.pt --predict "планина"
-#
 import argparse
 import random
 from dataclasses import dataclass
@@ -40,7 +28,6 @@ def parse_stress_backtick(stressed: str) -> Optional[Tuple[str, int]]:
 
     for ch in stressed:
         if ch == "`":
-            # stress is on previous emitted char in plain_chars
             if len(plain_chars) == 0:
                 return None
             stress_idx = len(plain_chars) - 1
@@ -75,9 +62,6 @@ def word_to_ids(word: str, stoi: Dict[str, int]) -> List[int]:
 
 
 def make_vowel_mask(batch_words: List[str], max_len: int, device) -> torch.Tensor:
-    """
-    mask[b, t] = True if position t is a vowel char within the word length
-    """
     mask = torch.zeros((len(batch_words), max_len), dtype=torch.bool, device=device)
     for b, w in enumerate(batch_words):
         for t, ch in enumerate(w):
@@ -101,7 +85,6 @@ class StressDataset(torch.utils.data.Dataset):
 
 
 def collate_fn(batch):
-    # batch: list of (word, ids, length, stress_idx)
     words = [x[0] for x in batch]
     lengths = torch.stack([x[2] for x in batch], dim=0)
     stress = torch.stack([x[3] for x in batch], dim=0)
@@ -126,10 +109,9 @@ class BiLSTMStress(nn.Module):
             dropout=dropout if layers > 1 else 0.0,
             batch_first=True,
         )
-        self.proj = nn.Linear(2 * hid, 1)  # per-position logit
+        self.proj = nn.Linear(2 * hid, 1)
 
     def forward(self, x, lengths):
-        # x: (B,L) ; lengths: (B,)
         e = self.emb(x)  # (B,L,E)
         packed = nn.utils.rnn.pack_padded_sequence(e, lengths.cpu(), batch_first=True, enforce_sorted=False)
         out_packed, _ = self.lstm(packed)
@@ -150,7 +132,6 @@ def accuracy(model, loader, device):
 
         logits = model(x, lengths)  # (B,L)
         mask = make_vowel_mask(words, logits.size(1), device=device)
-        # disallow non-vowels (and padded positions implicitly via mask)
         masked_logits = logits.masked_fill(~mask, -1e9)
         pred = masked_logits.argmax(dim=1)
         correct += (pred == y).sum().item()
@@ -174,7 +155,6 @@ def train(args):
         if parsed is None:
             continue
         w, sidx = parsed
-        # stress should be on a vowel (skip weird entries)
         if sidx < 0 or sidx >= len(w) or w[sidx] not in VOWELS_BG:
             continue
         items.append((w, sidx))
@@ -217,7 +197,6 @@ def train(args):
 
             logits = model(x, lengths)  # (B,L)
 
-            # vowel-only classification over positions
             mask = make_vowel_mask(words, logits.size(1), device=device)
             masked_logits = logits.masked_fill(~mask, -1e9)
 
@@ -278,7 +257,6 @@ def predict(args):
     masked_logits = logits.masked_fill(~mask, -1e9)
     idx = int(masked_logits.argmax(dim=1).item())
 
-    # print stressed form with backtick after stressed char (same style as dataset)
     stressed = word[: idx + 1] + "`" + word[idx + 1 :]
     print(stressed)
     print("stress_char_index =", idx)
@@ -312,7 +290,6 @@ def main():
     if not args.csv:
         raise ValueError("Provide --csv to train, or --load + --predict to run inference.")
 
-    # default to filtering single-stress rows (safer)
     if not args.only_one_stress:
         print("Tip: add --only_one_stress to avoid multi-stress compounds.")
 

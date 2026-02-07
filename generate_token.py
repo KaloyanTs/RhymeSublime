@@ -46,7 +46,6 @@ def rhyme_penalty_str(base_tail: str, cand_tail: str):
         return 0.0
     n, m = len(base_tail), len(cand_tail)
     dp = [[0.0] * (m + 1) for _ in range(n + 1)]
-    # Insertion/deletion cost: constant 10.0 per character
     for i in range(1, n + 1):
         dp[i][0] = dp[i - 1][0] + 10.0
     for j in range(1, m + 1):
@@ -69,7 +68,6 @@ def rhyme_penalty_str(base_tail: str, cand_tail: str):
 def repetition_penalty(line_ids, w_rep, id2tok):
     if w_rep <= 0.0:
         return 0.0
-    # Compute repetition penalty by characters (not tokens), mirroring generator_char
     line_text = "".join(id2tok[t] for t in line_ids)
     pen = 0.0
     run = 1
@@ -144,7 +142,6 @@ def generateText(
         word = line_text[start+1:i+1]
         if not word:
             return "", 0
-        # Determine stress index: prefer dictionary, then predictor; fallback to last vowel
         if stress_dict and word in stress_dict:
             if debug: print("[Gen] Found cached stress for word:", word)
             sidx = stress_dict[word]
@@ -152,7 +149,6 @@ def generateText(
             if debug: print("[Gen] Predicting stress for word:", word)
             sidx = int(stress_predict(word))
         else:
-            # Fallback: use last vowel position; if none, use 0 (whole word)
             sidx = 0
             for j in range(len(word) - 1, -1, -1):
                 if word[j] in VOWELS_BG:
@@ -160,7 +156,6 @@ def generateText(
                     break
         if sidx < 0 or sidx >= len(word):
             return "", 0
-        # Always compare from stress inclusive to the end of the word
         tail = word[sidx:]
         return tail, sidx
 
@@ -238,7 +233,6 @@ def generateText(
             prev_last_id = last_id_local; prev_last_tok = last_tok_local
             forced_newline = False
             for _ in range(max_line_len):
-                # Track previous state before stepping
                 prev_h = h_local; prev_c = c_local
                 prev_last_id = last_id_local; prev_last_tok = last_tok_local
                 nxt, lp, h_local, c_local = step(last_id_local, h_local, c_local, last_tok_local)
@@ -254,7 +248,6 @@ def generateText(
             if stop_id is not None and len(toks) > 0 and (toks[-1] == stop_id or toks[0] == stop_id):
                 is_ended = True
 
-            # Debug: print top-5 tokens for the final step's distribution
             if debug:
                 dbg_last_id = last_id_local if forced_newline else prev_last_id
                 dbg_last_tok = last_tok_local if forced_newline else prev_last_tok
@@ -341,7 +334,6 @@ def generateText(
         if stop_id in prefix_ids:
             break
 
-    # Insert stress marks in the last word of each line (apostrophe)
     print()
     final = ""
     lines = out_text.splitlines()

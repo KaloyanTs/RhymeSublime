@@ -16,24 +16,19 @@ def process_row(name, name_stressed):
     
     stress_count = name_stressed.count("`")
     
-    # Case 1: Already has exactly 1 stress - keep as is
     if stress_count == 1:
         return name_stressed
     
-    # Case 2: Multiple stresses - keep only the first
     if stress_count > 1:
         first_backtick = name_stressed.find("`")
         return name_stressed[:first_backtick+1] + name_stressed[first_backtick+1:].replace("`", "")
     
-    # Case 3: No stress - check if single vowel word
     vowel_count = sum(1 for ch in name if ch in VOWELS_BG)
     if vowel_count == 1:
-        # Add stress after the single vowel
         for i, ch in enumerate(name):
             if ch in VOWELS_BG:
                 return name[:i+1] + "`" + name[i+1:]
     
-    # Case 4: No stress and multiple/no vowels - skip this row
     return None
 
 def main(inp, out):
@@ -49,7 +44,6 @@ def main(inp, out):
         processed = process_row(row[" name"], row[" name_stressed"])
         
         if processed is not None:
-            # Track statistics
             stress_count = str(row[" name_stressed"]).count("`")
             if stress_count == 1:
                 stats["exact_1"] += 1

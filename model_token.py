@@ -7,7 +7,6 @@ class TokenLSTMLanguageModelPack(torch.nn.Module):
         device = next(self.parameters()).device
         m = max(len(s) for (a, s) in source)
 
-        # Encode sequences using greedy longest-match over token vocab (BPE-style)
         sents = []
         for (a, seq) in source:
             enc = []
@@ -15,7 +14,6 @@ class TokenLSTMLanguageModelPack(torch.nn.Module):
                 if w in self.word2ind:
                     enc.append(self.word2ind[w])
                 elif self._letter_re.match(w):
-                    # split unknown word into sub-tokens greedily
                     for t in self._greedy_encode_word(w):
                         enc.append(self.word2ind.get(t, self.unkTokenIdx))
                 else:
@@ -78,13 +76,11 @@ class TokenLSTMLanguageModelPack(torch.nn.Module):
         self.embed_auth_out = torch.nn.Embedding(len(auth2id), hidden_size)
         self.projection = torch.nn.Linear(hidden_size, len(word2ind))
 
-        # id -> token mapping (optional)
         self.id2tok = [None] * len(word2ind)
         for tok, i in word2ind.items():
             if 0 <= i < len(self.id2tok):
                 self.id2tok[i] = tok
 
-        # Precompute greedy vocab: letter-only tokens sorted by length desc
         self._letter_re = re.compile(r"^[A-Za-z\u0400-\u04FF\u0500-\u052F]+$")
         self._greedy_vocab = [t for t in word2ind.keys() if self._letter_re.match(t)]
         self._greedy_vocab.sort(key=len, reverse=True)
@@ -102,7 +98,6 @@ class TokenLSTMLanguageModelPack(torch.nn.Module):
             pass
 
     def _greedy_encode_word(self, word: str):
-        """Greedy longest-prefix encoding using the final token set (self._greedy_vocab)."""
         if not word:
             return []
         i = 0
@@ -125,7 +120,6 @@ class TokenLSTMLanguageModelPack(torch.nn.Module):
         return out
 
     def _rhyme_loss_last(self, logits_seq, y, source_lengths):
-        """Incentivize last token before newline to match previous line's last token."""
         if self.lambda_rhyme <= 0.0 or self.lineEndTokenIdx is None:
             return logits_seq.new_tensor(0.0)
 

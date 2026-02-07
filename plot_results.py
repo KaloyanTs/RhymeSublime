@@ -1,4 +1,3 @@
-# plot_results.py
 import json
 from pathlib import Path
 
@@ -6,8 +5,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
-JSON_PATH = "results/database.json"          # <-- hard-coded path to your .json
-OUT_DIR = Path("assets")            # <-- save PDFs here
+JSON_PATH = "results/database.json"
+OUT_DIR = Path("assets")
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 
 K_LIST = [1, 2, 4, 8, 16, 32, 64]
@@ -86,12 +85,9 @@ def plot_rhyme_vs_K_for_lambda(data, lam: float):
     return out
 
 def main():
-    # IMPORTANT: your file must be valid JSON.
-    # Replace placeholders "?" with null (recommended) OR keep "?" as string.
     results = load_results(JSON_PATH)
     data = collect_by_model(results)
 
-    # Make plots for every lambda that appears in either model
     all_lams = sorted({lam for m in data.values() for lam in m.keys()})
     saved = []
     for lam in all_lams:
