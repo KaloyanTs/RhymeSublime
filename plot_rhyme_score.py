@@ -16,17 +16,14 @@ def read_res_file(path):
     data = {}
     with open(path, 'r', encoding='utf-8') as f:
         reader = csv.DictReader(f)
-        # Expect headers: model,K,avg_rhyme_penalty,pairs,lines
         for row in reader:
             try:
                 model = row.get('model')
                 K = int(row.get('K'))
                 avg = float(row.get('avg_rhyme_penalty'))
             except Exception:
-                # Skip malformed rows
                 continue
             data.setdefault(model, []).append((K, avg))
-    # Sort each model's points by K ascending
     for m in data:
         data[m].sort(key=lambda x: x[0])
     return data
@@ -68,7 +65,6 @@ def main():
         print('No data found in file (check headers and content).')
         sys.exit(1)
 
-    # Ensure output directory exists
     out_dir = os.path.dirname(args.out) or '.'
     try:
         os.makedirs(out_dir, exist_ok=True)

@@ -2,7 +2,6 @@ import argparse
 import pickle
 import sys
 
-# Try to import parameters to get default file names
 try:
     from parameters import (
         testDataFileName, trainDataFileName,
@@ -10,7 +9,6 @@ try:
         testDataFileName_token, trainDataFileName_token,
     )
 except Exception:
-    # Fallback names if parameters.py isn't available
     testDataFileName = 'testData'
     trainDataFileName = 'trainData'
     testDataFileName_transformer = 'testDataTransformer'
@@ -40,8 +38,6 @@ def load_pickle(path: str):
 
 
 def format_sequence(seq):
-    # seq is a list of tokens/characters including specials like '{', '}', '\n'
-    # Show both raw list length and a readable string
     try:
         joined = ''.join(seq)
     except Exception:

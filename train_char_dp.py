@@ -49,7 +49,6 @@ def trainModel(trainCorpus, testCorpus, lm, optimizer, epochs, batchSize):
                     ", loss:", float(loss.item())
                 )
 
-            # Optional: keep the old "save if good" behavior, but don't hardcode a specific threshold
             if "saveLossThreshold_char" in globals():
                 thr = float(globals()["saveLossThreshold_char"])
                 if loss.item() < thr:

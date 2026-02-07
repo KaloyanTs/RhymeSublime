@@ -11,3 +11,4 @@ bg_dict_csv/
 __pycache__/
 .vscode/
 *.pyc
+*pe.py

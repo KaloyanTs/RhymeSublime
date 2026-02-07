@@ -4,9 +4,6 @@ import torch
 from parameters import modelFileName_reversed
 
 
-# -------------------------
-# RTL preprocessing (safe)
-# -------------------------
 def poem_to_rtl(text: str) -> str:
     """
     Reverse characters inside each line (top-down preserved), BUT keep leading '{' and trailing '}' in place
@@ -15,13 +12,11 @@ def poem_to_rtl(text: str) -> str:
     if not text:
         return text
 
-    # Keep boundary control tokens stable if present
     prefix = "{" if text.startswith("{") else ""
     suffix = "}" if text.endswith("}") else ""
 
     core = text[len(prefix) : len(text) - len(suffix) if suffix else len(text)]
 
-    # Preserve trailing newline if you rely on it
     trail_nl = "\n" if core.endswith("\n") else ""
     if trail_nl:
         core = core[:-1]
@@ -36,17 +31,8 @@ def encode_chars(text: str, tokens2id: dict, unk_id: int) -> list[int]:
     return [tokens2id.get(ch, unk_id) for ch in text]
 
 
-# -------------------------
-# Batch preparation
-# -------------------------
+
 def _parse_sample(sample):
-    """
-    Supported formats per item in (train|test)Corpus:
-      - (author_id:int, ids:list[int])
-      - (author:str, text:str)
-      - (author_id:int, text:str)
-      - {"author": ..., "text": ...} or {"author": ..., "ids": ...}
-    """
     if isinstance(sample, dict):
         author = sample.get("author", sample.get("auth", None))
         if "ids" in sample:
@@ -61,7 +47,6 @@ def _parse_sample(sample):
             return author, payload, "text"
         return author, payload, "ids"
 
-    # If your corpus is ONLY text strings, author conditioning can't work reliably.
     raise ValueError("Unsupported sample format. Use (author, text) or (author_id, ids) etc.")
 
 
@@ -73,13 +58,6 @@ def make_batch(
     device: torch.device | None = None,
     pad_input_id: int | None = None,
 ):
-    """
-    Returns:
-      input_ids:  (T, B) Long
-      target_ids: (T, B) Long with ignore_index where padded
-      author_ids: (B,)   Long
-      token_count: int (non-ignored target tokens)
-    """
     if device is None:
         device = next(model.parameters()).device
     if pad_input_id is None:
@@ -147,9 +125,7 @@ def make_batch(
     )
 
 
-# -------------------------
-# Training + Perplexity
-# -------------------------
+
 def trainModel_rtl(
     trainCorpus,
     testCorpus,
@@ -172,7 +148,6 @@ def trainModel_rtl(
     if device.type == "cuda":
         lm.flatten_lstm_parameters()
 
-    # Save initial model state similar to train_char_dp
     torch.save(lm.state_dict(), modelFileName_reversed)
     print("[CharTrainRTL] Initial checkpoint saved:", modelFileName_reversed)
 
@@ -208,7 +183,6 @@ def trainModel_rtl(
                 ", loss:", float(loss.item())
             )
 
-        # Save model after each epoch similar to train_char_dp
         torch.save(lm.state_dict(), modelFileName_reversed)
         print("[CharTrainRTL] Model saved:", modelFileName_reversed)
 
@@ -249,8 +223,7 @@ def perplexity_rtl(
             continue
 
         with torch.cuda.amp.autocast(enabled=(use_amp and device.type == "cuda")):
-            loss = lm(input_ids, author_ids, target_ids=target_ids)  # mean over non-ignored tokens
-
+            loss = lm(input_ids, author_ids, target_ids=target_ids) 
         total_nll += float(loss.item()) * tok
         total_tok += tok
 

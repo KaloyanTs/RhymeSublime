@@ -29,13 +29,6 @@ def getAlphabetAuthors(corpus):
     return symbols, authors
 
 def _tokenize_text(text: str):
-    """
-    Simple local tokenizer producing tokens including spaces and newlines.
-    - Words: consecutive letters (Latin or Cyrillic)
-    - Spaces: ' '
-    - Newlines: '\n'
-    - Other punctuation: single-character tokens
-    """
     tokens = []
     i = 0
     while i < len(text):
@@ -47,7 +40,6 @@ def _tokenize_text(text: str):
             tokens.append(' ')
             i += 1
         else:
-            # word token: letters only
             if re.match(r"[A-Za-z\u0400-\u04FF\u0500-\u052F]", ch):
                 j = i + 1
                 while j < len(text) and re.match(r"[A-Za-z\u0400-\u04FF\u0500-\u052F]", text[j]):
@@ -55,7 +47,6 @@ def _tokenize_text(text: str):
                 tokens.append(text[i:j])
                 i = j
             else:
-                # punctuation or other symbol
                 tokens.append(ch)
                 i += 1
     return tokens
@@ -82,7 +73,6 @@ def _split_units(text: str):
 
 def _bpe_train(words, merges: int):
     """Train simple BPE merges on a list of words (each word is a string)."""
-    # Represent words as lists of characters
     vocab = [list(w) for w in words if w]
 
     def count_pairs(vocab_seq):
@@ -103,7 +93,6 @@ def _bpe_train(words, merges: int):
         print("Best pair:", best, "Count:", pairs[best])
         merges_list.append(best)
 
-        # Merge occurrences of best pair
         a, b = best
         new_vocab = []
         for symbols in vocab:
@@ -126,7 +115,6 @@ def _bpe_encode(word: str, merges_list):
     symbols = list(word)
     if not merges_list:
         return symbols
-    # Apply merges in order
     for a, b in merges_list:
         i = 0
         new_symbols = []
@@ -141,10 +129,6 @@ def _bpe_encode(word: str, merges_list):
     return symbols
 
 def _greedy_encode(word: str, vocab_tokens):
-    """Greedy longest-prefix encoding of a word using final token set.
-    Assumes vocab_tokens is a list of tokens sorted by length descending.
-    Falls back to single-character token when no longer token matches.
-    """
     if not word:
         return []
     i = 0
@@ -184,7 +168,6 @@ def prepareData(corpusFileName, startChar, endChar, unkChar, padChar, maxPoemLen
         char2id = { c:i for i,c in enumerate(charset)}
         print('[Utils] Char vocab size:', len(charset))
     elif tokenization == 'token':
-        # Build token vocabulary from poems with local tokenizer
         token_counts = {}
         for i,s in enumerate(poems):
             print(f"Processing poem {i+1} for tokenization...", end='\r', flush=True)
@@ -193,15 +176,12 @@ def prepareData(corpusFileName, startChar, endChar, unkChar, padChar, maxPoemLen
                 poem = s[n+1:]
                 for tok in _tokenize_text(poem):
                     token_counts[tok] = token_counts.get(tok, 0) + 1
-        # Ensure special tokens are present
         for sp in (startChar, endChar, unkChar, padChar):
             token_counts[sp] = token_counts.get(sp, 0)
-        # Vocabulary with threshold
         tokenset = [startChar,endChar,unkChar,padChar] + [t for t in sorted(token_counts) if token_counts[t] > symbolCountThreshold]
         char2id = { t:i for i,t in enumerate(tokenset)}
         print('[Utils] Token vocab size:', len(tokenset))
     elif tokenization == 'bpe':
-        # Train BPE merges over words from corpus
         print("[Utils] Training BPE merges...")
         all_words = []
         for i,s in enumerate(poems):
@@ -217,7 +197,6 @@ def prepareData(corpusFileName, startChar, endChar, unkChar, padChar, maxPoemLen
         print('[Utils] BPE merges learned:', len(merges_list))
 
         token_counts = {}
-        # Build tokens for entire corpus using trained merges
         for i,s in enumerate(poems):
             print(f"Processing poem {i+1} for BPE tokenization...", end='\r', flush=True)
             if len(s) > 0:
@@ -234,14 +213,12 @@ def prepareData(corpusFileName, startChar, endChar, unkChar, padChar, maxPoemLen
                         seq_tokens.append(u)
                 for t in seq_tokens:
                     token_counts[t] = token_counts.get(t, 0) + 1
-        # Ensure special tokens and ALL single characters are present in vocab, regardless of frequency
         for sp in (startChar, endChar, unkChar, padChar, ' ', '\n'):
             token_counts[sp] = token_counts.get(sp, 0)
         for ch in symbols.keys():
             token_counts[ch] = token_counts.get(ch, 0)
 
         tokenset = [startChar, endChar, unkChar, padChar] + sorted(token_counts.keys())
-        # Deduplicate while preserving the specials order
         seen = set()
         dedup_tokens = []
         for t in tokenset:
@@ -250,12 +227,9 @@ def prepareData(corpusFileName, startChar, endChar, unkChar, padChar, maxPoemLen
                 dedup_tokens.append(t)
         char2id = { t:i for i,t in enumerate(dedup_tokens)}
         print('[Utils] BPE token vocab size (with chars):', len(dedup_tokens))
-        # Prepare greedy vocab (only letter tokens) sorted by length desc for encoding
         letter_re = re.compile(r"^[A-Za-z\u0400-\u04FF\u0500-\u052F]+$")
         greedy_vocab = [t for t in dedup_tokens if letter_re.match(t)]
         greedy_vocab.sort(key=len, reverse=True)
-        # cache merges list in mapping for later use (optional external usage not required here)
-        # Note: merges_list isn't persisted; encoding is done during corpus build below
     else:
         raise ValueError("Unsupported tokenization: " + str(tokenization))
     authset = [a for a in sorted(authors) if authors[a] > authorCountThreshold]
@@ -276,12 +250,10 @@ def prepareData(corpusFileName, startChar, endChar, unkChar, padChar, maxPoemLen
             elif tokenization == 'bpe':
                 units = _split_units(poem)
                 seq_tokens = []
-                # Use trained merges_list from above to encode words
                 for u in units:
                     if u == ' ' or u == '\n':
                         seq_tokens.append(u)
                     elif re.match(r"^[A-Za-z\u0400-\u04FF\u0500-\u052F]+$", u):
-                        # Greedy longest-match over final token set
                         seq_tokens.extend(_greedy_encode(u, greedy_vocab))
                     else:
                         seq_tokens.append(u)
