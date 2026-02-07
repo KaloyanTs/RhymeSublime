@@ -231,23 +231,39 @@ if len(sys.argv)>1 and sys.argv[1] == 'perplexity_char_dp':
     print('Model perplexity: ', train_char_dp.perplexity(lm, testCorpus, batchSize_dp))
     
 if len(sys.argv)>1 and sys.argv[1] == 'generate_token':
-    
     print(sys.argv)
     
-    if len(sys.argv)>2: auth = sys.argv[2]
+    if len(sys.argv)>2:
+        auth = sys.argv[2]
     else:
-        print('Usage: python run.py generate_token author [debug [seed [temperature]]]')
-        
+        print('Usage: python run.py generate_token author K [debug [seed [temperature]]]')
+        sys.exit(1)
+
+    if len(sys.argv)>3:
+        try:
+            K = int(sys.argv[3])
+        except Exception:
+            print('K must be an integer')
+            sys.exit(1)
+    else:
+        print('Usage: python run.py generate_token author K [debug [seed [temperature]]]')
+        sys.exit(1)
+
     debug = False
-    if len(sys.argv)>3: debug = True
-        
-    if len(sys.argv)>4: seed = sys.argv[4]
-    else: seed = startChar
+    if len(sys.argv)>4:
+        debug = True
+
+    if len(sys.argv)>5:
+        seed = sys.argv[5]
+    else:
+        seed = startChar
 
     assert seed[0] == startChar
 
-    if len(sys.argv)>5: temperature = float(sys.argv[5])
-    else: temperature = defaultTemperature
+    if len(sys.argv)>6:
+        temperature = float(sys.argv[6])
+    else:
+        temperature = defaultTemperature
 
     tokens2id = pickle.load(open(tokens2idFileName_token, 'rb'))
     auth2id = pickle.load(open(auth2idFileName, 'rb'))
@@ -262,25 +278,42 @@ if len(sys.argv)>1 and sys.argv[1] == 'generate_token':
 
     authid = auth2id.get(auth,0)
     if authid==0: print('Авторът не е известен.')
-    print(generate_token.generateText(lm, tokens2id, auth, seed, temperature=temperature, stress_predict=stress.predict, stress_dict=stress_dict, debug=debug))
+    print(generate_token.generateText(lm, tokens2id, auth, seed, temperature=temperature, K=K, stress_predict=stress.predict, stress_dict=stress_dict, debug=debug))
 
 if len(sys.argv)>1 and sys.argv[1] == 'generate_char_dp':
     print(sys.argv)
     
-    if len(sys.argv)>2: auth = sys.argv[2]
+    if len(sys.argv)>2:
+        auth = sys.argv[2]
     else:
-        print('Usage: python run.py generate_char_dp author [debug [seed [temperature]]]')
-        
+        print('Usage: python run.py generate_char_dp author K [debug [seed [temperature]]]')
+        sys.exit(1)
+
+    if len(sys.argv)>3:
+        try:
+            K = int(sys.argv[3])
+        except Exception:
+            print('K must be an integer')
+            sys.exit(1)
+    else:
+        print('Usage: python run.py generate_char_dp author K [debug [seed [temperature]]]')
+        sys.exit(1)
+
     debug = False
-    if len(sys.argv)>3: debug = True
-        
-    if len(sys.argv)>4: seed = sys.argv[4]
-    else: seed = startChar
+    if len(sys.argv)>4:
+        debug = True
+
+    if len(sys.argv)>5:
+        seed = sys.argv[5]
+    else:
+        seed = startChar
 
     assert seed[0] == startChar
 
-    if len(sys.argv)>5: temperature = float(sys.argv[5])
-    else: temperature = defaultTemperature
+    if len(sys.argv)>6:
+        temperature = float(sys.argv[6])
+    else:
+        temperature = defaultTemperature
 
     tokens2id = pickle.load(open(tokens2idFileName_dp, 'rb'))
     auth2id = pickle.load(open(auth2idFileName, 'rb'))
@@ -295,25 +328,42 @@ if len(sys.argv)>1 and sys.argv[1] == 'generate_char_dp':
 
     authid = auth2id.get(auth,0)
     if authid==0: print('Авторът не е известен.')
-    print(generate_char_dp.generateText(lm, tokens2id, auth, seed, temperature=temperature, debug=debug, stress_predict=stress.predict, stress_dict=stress_dict))
+    print(generate_char_dp.generateText(lm, tokens2id, auth, seed, temperature=temperature, K=K, debug=debug, stress_predict=stress.predict, stress_dict=stress_dict))
 
 if len(sys.argv)>1 and sys.argv[1] == 'generate_reversed':
     print(sys.argv)
 
-    if len(sys.argv)>2: auth = sys.argv[2]
+    if len(sys.argv)>2:
+        auth = sys.argv[2]
     else:
-        print('Usage: python run.py generate_reversed author [debug [seed [temperature]]]')
+        print('Usage: python run.py generate_reversed author K [debug [seed [temperature]]]')
+        sys.exit(1)
+
+    if len(sys.argv)>3:
+        try:
+            K = int(sys.argv[3])
+        except Exception:
+            print('K must be an integer')
+            sys.exit(1)
+    else:
+        print('Usage: python run.py generate_reversed author K [debug [seed [temperature]]]')
+        sys.exit(1)
 
     debug = False
-    if len(sys.argv)>3: debug = True
+    if len(sys.argv)>4:
+        debug = True
 
-    if len(sys.argv)>4: seed = sys.argv[4]
-    else: seed = startChar
+    if len(sys.argv)>5:
+        seed = sys.argv[5]
+    else:
+        seed = startChar
 
     assert seed[0] == startChar
 
-    if len(sys.argv)>5: temperature = float(sys.argv[5])
-    else: temperature = defaultTemperature
+    if len(sys.argv)>6:
+        temperature = float(sys.argv[6])
+    else:
+        temperature = defaultTemperature
 
     tokens2id = pickle.load(open(tokens2idFileName_reversed, 'rb'))
     auth2id = pickle.load(open(auth2idFileName, 'rb'))
@@ -349,26 +399,44 @@ if len(sys.argv)>1 and sys.argv[1] == 'generate_reversed':
         temperature=temperature,
         stress_predict_fn=stress.predict,
         stress_dict=stress_dict,
-        debug=debug
+        debug=debug,
+        K=K
     ))
 
 if len(sys.argv)>1 and sys.argv[1] == 'generate_reversed_abab':
     print(sys.argv)
 
-    if len(sys.argv)>2: auth = sys.argv[2]
+    if len(sys.argv)>2:
+        auth = sys.argv[2]
     else:
-        print('Usage: python run.py generate_reversed_abab author [debug [seed [temperature]]]')
+        print('Usage: python run.py generate_reversed_abab author K [debug [seed [temperature]]]')
+        sys.exit(1)
+
+    if len(sys.argv)>3:
+        try:
+            K = int(sys.argv[3])
+        except Exception:
+            print('K must be an integer')
+            sys.exit(1)
+    else:
+        print('Usage: python run.py generate_reversed_abab author K [debug [seed [temperature]]]')
+        sys.exit(1)
 
     debug = False
-    if len(sys.argv)>3: debug = True
+    if len(sys.argv)>4:
+        debug = True
 
-    if len(sys.argv)>4: seed = sys.argv[4]
-    else: seed = startChar
+    if len(sys.argv)>5:
+        seed = sys.argv[5]
+    else:
+        seed = startChar
 
     assert seed[0] == startChar
 
-    if len(sys.argv)>5: temperature = float(sys.argv[5])
-    else: temperature = defaultTemperature
+    if len(sys.argv)>6:
+        temperature = float(sys.argv[6])
+    else:
+        temperature = defaultTemperature
 
     tokens2id = pickle.load(open(tokens2idFileName_reversed, 'rb'))
     auth2id = pickle.load(open(auth2idFileName, 'rb'))
@@ -402,6 +470,7 @@ if len(sys.argv)>1 and sys.argv[1] == 'generate_reversed_abab':
         temperature=temperature,
         stress_predict_fn=stress.predict,
         stress_dict=stress_dict,
-        debug=debug
+        debug=debug,
+        K=K
     ))
     
